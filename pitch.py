@@ -1,9 +1,8 @@
-import librosa
 import numpy as np
 import sys
 import pprint
 import openpyxl
-from intervaltree import Interval, IntervalTree
+from intervaltree import IntervalTree
 
 np.set_printoptions(threshold=sys.maxsize)
 
