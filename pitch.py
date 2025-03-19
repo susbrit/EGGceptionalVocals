@@ -22,16 +22,14 @@ def create_tree():
             (100.9,106.9,"G#2"),  (201.8,213.8,"G#3"), (403.7,427.7,"G#4"), (807.3,855.3,"G#5"), (1614.6,1710.6,"G#6"), # G#
             (106.9,113.27,"A2"),  (213.8,226.5,"A3"),  (427.7,453.1,"A4"),  (855.3,906.2,"A5"),  (1710.6,1812.3,"A6"), # A
             (113.27,120.0,"A#2"), (226.5,240.0,"A#3"), (453.1,480.0,"A#4"), (906.2,960.1,"A#5"), (1812.3,1920.1,"A#6"), # A#
-            (120.0,127.1,"B2"),   (240.0,254.3,"B3"),  (480.0,508.6,"B4"),  (960.1,1017.1,"B5"), (1920.1,2034.3,"B6")  # B
+            (120.0,127.1,"B2"),   (240.0,254.3,"B3"),  (480.0,508.6,"B4"),  (960.1,1017.1,"B5"), (1920.1,2034.3,"B6"),  # B
+    
+    # Undefined
+            (0.0, 63.6, "Undefined"), (2034.3, np.inf, "Undefined")
     ]
     
     tree = IntervalTree.from_tuples(ivs)
     return tree
-
-pitch_tree = create_tree()
-
-# hardcoded wb file
-wb = openpyxl.load_workbook('2 Pitch Test.xlsx')
 
 def proc_freq_data(wb):
     # call the first sheet in the workbook
@@ -42,18 +40,44 @@ def proc_freq_data(wb):
     # extract times and pitch frequencies
     ds = 6 # data starts on row 6
     times = []
-    pitches = []
+    freqs = []
     for i in range(ds, rows):
-        # exclude any entries with empty frequency values
+        # zero out any entries with empty frequency values
         time = ws.cell(row=i,column=1).value
         freq = ws.cell(row=i,column=2).value
+        
+        times.append(time)
         if freq is not None:
-            times.append(time)
-            res = pitch_tree[freq]
-            pitch  = list(res).pop()[2]
-            pitches.append(pitch)            
-    return times, pitches
+            freqs.append(freq)
+        else:
+            freqs.append(0)
+
+    # get 0.5 sec averages
+    times_avg = []
+    freqs_avg = []
+    step = 38
+    for i in range (0, rows-ds, step):
+        times_avg.append(times[i])
+
+        freqs_avg.append(np.mean(freqs[i:i+step]))
+
+    # evaluate pitches
+    pitches = []
+    for freq in freqs_avg:
+        res = pitch_tree[freq]
+        pitch = list(res).pop()[2]
+        pitches.append(pitch)
+    
+    return times_avg, pitches
+
+# Quick run of pitch analysis
+
+pitch_tree = create_tree()
+
+# hardcoded wb file
+wb = openpyxl.load_workbook('data/C Major Scale without Piano Staccoto.xlsx')
 
 times, pitches = proc_freq_data(wb)
 
+pprint.pp("times:\n" + str(times))
 pprint.pp(pitches)
