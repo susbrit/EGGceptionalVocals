@@ -31,6 +31,12 @@ def create_tree():
     tree = IntervalTree.from_tuples(ivs)
     return tree
 
+def get_pitch(freq):
+        res = pitch_tree[freq]
+        pitch = list(res).pop()[2]
+        return pitch
+
+
 def proc_freq_data(wb, step):
     # call the first sheet in the workbook
     ws = wb.active
@@ -73,15 +79,11 @@ def proc_freq_data(wb, step):
     # evaluate pitches
     pitches1 = []
     for freq in freqs_avg1:
-        res = pitch_tree[freq]
-        pitch = list(res).pop()[2]
-        pitches1.append(pitch)
+        pitches1.append(get_pitch(freq))
 
     pitches2 = [] 
     for freq in freqs_avg2:
-        res = pitch_tree[freq]
-        pitch = list(res).pop()[2]
-        pitches2.append(pitch)
+        pitches2.append(get_pitch(freq))
 
     times_res = []
     times_res.append(times1[0])
