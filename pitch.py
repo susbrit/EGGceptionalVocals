@@ -61,28 +61,33 @@ def proc_freq_data(wb, step):
     # get 0.5 sec averages
     times1 = []
     times2 = []
-    freqs_avg1 = []
-    freqs_avg2 = []
+    freqs_med1 = []
+    freqs_med2 = []
     #step = 
     for i in range (0, rows-ds, step):
-        times1.append(np.median(times[i:i+step]))
-        freqs_avg1.append(np.median(freqs[i:i+step]))
+        #times1.append(np.median(times[i:i+step]))
+        #freqs_med1.append(np.median(freqs[i:i+step]))
         
         step_med = i + (step // 2)
-        if step_med < rows-ds:
-            times2.append(np.median(times[step_med:step_med+step]))
-            freqs_avg2.append(np.median(freqs[step_med:step_med+step]))
+        if (step_med) < rows-ds:
+            times1.append(times[step_med])
+            freqs_med1.append(np.median(freqs[i:i+step]))
+
+        if (step_med + step) < rows-ds:
+            times2.append(times[i+step])
+            freqs_med2.append(np.median(freqs[step_med:step_med+step]))
         else:
-            times2.append(np.median(times[i:i+step]))
-            freqs_avg2.append(np.median(freqs[i:i+step]))
+            times2.append(times[step_med])
+            freqs_med2.append(np.median(freqs[i:i+step]))
+
 
     # evaluate pitches
     pitches1 = []
-    for freq in freqs_avg1:
+    for freq in freqs_med1:
         pitches1.append(get_pitch(freq))
 
     pitches2 = [] 
-    for freq in freqs_avg2:
+    for freq in freqs_med2:
         pitches2.append(get_pitch(freq))
 
     times_res = []
