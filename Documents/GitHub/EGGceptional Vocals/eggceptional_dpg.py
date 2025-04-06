@@ -115,10 +115,14 @@ class AudioPlayer:
         if not app_data["file_path_name"]:
             return
 
+        self.plot_cursors.clear()
+        self.hover_cursors.clear()
+        self.rows_in_table = 0
+        self.plots_per_row = 0
         self.loaded_audio.clear()
         self.loaded_audio["file_details"] = app_data
-        self.set_is_playing(False)
         self.loaded_audio["current_time_index"] = 0
+        self.set_is_playing(False)
         # Generate label with audio file name
         dpg.set_value("selected_file_name", app_data["file_name"])
 
@@ -157,6 +161,7 @@ class AudioPlayer:
             max_time = min(min_time + self.SECONDS_PER_ROW, math.floor(duration))
             # if extra audio is <1 second, cut it off
             if (max_time-min_time == 0):
+                self.rows_in_table = self.rows_in_table - 1
                 break
 
             # Generate X values (time axis)
@@ -193,15 +198,15 @@ class AudioPlayer:
 
         self.create_cursor_set(0)
             
-    # Where row_number is the row of the table to initialize this cursor
-    def create_cursor_set(self, row_number, x_value=0):
+    # Where row_num is the row in table where cursor is initialized to
+    def create_cursor_set(self, row_num, x_value=0):
         # Initialize cursor
         for cursor_id in self.plot_cursors:
             dpg.delete_item(cursor_id)
         self.plot_cursors.clear()
         for i in range (self.plots_per_row):
             cursor_tag = f"playback_cursor_{i}"
-            new_line = dpg.add_inf_line_series([0], tag=cursor_tag, label="vertical line", parent=f"y_axis_{row_number}_{i}")
+            new_line = dpg.add_inf_line_series([0], tag=cursor_tag, label="vertical line", parent=f"y_axis_{row_num}_{i}")
             dpg.bind_item_theme(new_line, self.cursor_red)
             self.plot_cursors.append(cursor_tag)
             dpg.set_value(cursor_tag, [[x_value]])
@@ -211,10 +216,18 @@ class AudioPlayer:
         if self.loaded_audio == None:
             return
         self.loaded_audio["is_playing"] = playing_value
+        # play music
         if playing_value:
             dpg.set_item_label("play_button", "Pause")
+            if self.loaded_audio["current_time_index"] == None:
+                self.loaded_audio["current_time_index"] = 0
+            pygame.mixer.music.load(self.loaded_audio["file_details"]["file_path_name"])
+            pygame.mixer.music.play(start=self.loaded_audio["current_time_index"]/1000)  # Convert ms to seconds
+        # pause music
         else:
             dpg.set_item_label("play_button", "Play")
+            self.loaded_audio["current_time_index"] = pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]
+            pygame.mixer.music.pause()
 
     # Toggle play/pause of loaded audio on button click
     def toggle_play_pause(self):
@@ -224,15 +237,10 @@ class AudioPlayer:
         # going from play state to pause state
         if self.loaded_audio["is_playing"]:
             self.set_is_playing(False)
-            self.loaded_audio["current_time_index"] = pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]
-            pygame.mixer.music.pause()
         # going from pause state to play state
         else:
             self.set_is_playing(True)
-            if self.loaded_audio["current_time_index"] == None:
-                self.loaded_audio["current_time_index"] = 0
-            pygame.mixer.music.load(self.loaded_audio["file_details"]["file_path_name"])
-            pygame.mixer.music.play(start=self.loaded_audio["current_time_index"]/1000)  # Convert ms to seconds
+            
 
     # return to timestamp 0 of given audio file
     def reset_play(self):
@@ -263,9 +271,10 @@ class AudioPlayer:
                 pos = pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]
 
             # pos might be a negative value once the playback is completed
-            if pos < 0 or pos > self.loaded_audio["duration"] * 1000:
-                self.set_is_playing(False)
-                self.loaded_audio["current_time_index"] = 0
+            #if pos < 0 or pos >= self.loaded_audio["duration"] * 1000:
+            # if audio is done playing, stop updating
+            if self.loaded_audio["is_playing"] and not pygame.mixer.music.get_busy():
+                self.reset_play()
                 return
             # ms to s for position
             minutes = self.get_minutes(pos)
@@ -297,6 +306,9 @@ class AudioPlayer:
 
     # on mousemove, if hovering over a plot, create a new cursor at position
     def update_hover_cursor(self, app_data):
+        if (self.rows_in_table == 0 or self.plots_per_row == 0):
+            return
+
         # delete any previous hover cursors
         for cursor_id in self.hover_cursors:
             dpg.delete_item(cursor_id)
@@ -305,11 +317,16 @@ class AudioPlayer:
         for i in range(self.rows_in_table):
             for j in range(self.plots_per_row):
                 plot_id = f"waveform_{i}_{j}"
+                if not dpg.does_item_exist(plot_id):
+                    print(f"Error: {plot_id} is not a valid id for a plot right now. We have {self.rows_in_table} rows and {self.plots_per_row} plots per row?")
+                    return
                 # if plot has hover, create a new cursor on all plots in that row using that x coordinate
                 if dpg.is_item_hovered(plot_id):
                     mouse_pos = dpg.get_plot_mouse_pos()
                     for k in range(self.plots_per_row):
-                        self.hover_cursors.append(dpg.add_inf_line_series([mouse_pos[0]], label="vertical line", parent=f"y_axis_{i}_{k}", tag=f"hover_cursor_{i}_{k}"))
+                        hover_tag = f"hover_cursor_{i}_{k}"
+                        dpg.add_inf_line_series([mouse_pos[0]], label="vertical line", parent=f"y_axis_{i}_{k}", tag=hover_tag)
+                        self.hover_cursors.append(hover_tag)
                         dpg.bind_item_theme(f"hover_cursor_{i}_{k}", self.cursor_gray)
                     return
 
@@ -319,7 +336,9 @@ class AudioPlayer:
         if len(self.hover_cursors) == 0:
             return
         x_pos = dpg.get_value(self.hover_cursors[0])[0][0]
-        self.create_cursor_set(0, x_pos)
+        # use the name of the cursor tag to extract the row number to jump to
+        row_num = int(self.hover_cursors[0].split('_')[2])
+        self.create_cursor_set(row_num, x_pos)
         self.loaded_audio["current_time_index"] = x_pos * 1000
         self.update_position_label()
         self.set_is_playing(False)
