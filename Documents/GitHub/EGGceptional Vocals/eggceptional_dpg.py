@@ -24,10 +24,22 @@ class AudioPlayer:
         "pause_event"
     }
     """
+    #number of table rows
+    rows_in_table = 0
     #number of plots per table row
     plots_per_row = 0
+
+    #2d array of plots in the table
+    #table_plots = []
+
     #array of ids of plot cursors to update
     plot_cursors = []
+    #array of ids of hovering cursors
+    hover_cursors = []
+
+    # cursor styling
+    cursor_red = None
+    cursor_gray = None
 
     def __init__(self):
         pygame.mixer.init()
@@ -61,9 +73,20 @@ class AudioPlayer:
                     dpg.add_text("00:00/00:00", tag="playtime_status_text")
                     dpg.add_button(label="Reset", tag="reset_play_button", callback=self.reset_play)
         
-        #TODO add this to each plot when they are created
-        with dpg.item_handler_registry(tag="plot_hover_handler"):
-            dpg.add_item_hover_handler(callback=self.update_hover_cursor)
+        # event handlers
+        with dpg.handler_registry():
+            dpg.add_mouse_move_handler(callback=self.update_hover_cursor)
+            dpg.add_mouse_release_handler(callback=self.jump_to_hover_pos)
+
+        # styling
+        with dpg.theme() as self.cursor_red:
+            with dpg.theme_component():
+                dpg.add_theme_color(dpg.mvPlotCol_Line, (255, 0, 0, 255), category=dpg.mvThemeCat_Plots)
+
+        with dpg.theme() as self.cursor_gray:
+            with dpg.theme_component():
+                dpg.add_theme_color(dpg.mvPlotCol_Line, (100, 100, 100, 255), category=dpg.mvThemeCat_Plots)
+
         dpg.set_viewport_resize_callback(self.update_window_size)
         dpg.setup_dearpygui()
         dpg.show_viewport()
@@ -114,7 +137,7 @@ class AudioPlayer:
         dur_minutes = self.get_minutes(self.loaded_audio["duration"])
         dur_seconds = self.get_seconds_remainder(self.loaded_audio["duration"])
         dpg.set_value("playtime_status_text", f"00:00/{dur_minutes:02d}:{dur_seconds:02d}")
-        num_lines = math.ceil(duration /self.SECONDS_PER_ROW)
+        num_lines = math.ceil(duration / self.SECONDS_PER_ROW)
 
         if pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
@@ -125,9 +148,10 @@ class AudioPlayer:
         dpg.hide_item("no_file_text")
 
         self.plots_per_row = 2 # TEMP hard coded for demo
+        self.rows_in_table = num_lines
 
         # loop over each line and create a plot for each chunk
-        for i in range(num_lines):
+        for i in range(self.rows_in_table):
             # limits of time range per chunk
             min_time = i * self.SECONDS_PER_ROW
             max_time = min(min_time + self.SECONDS_PER_ROW, math.floor(duration))
@@ -143,27 +167,26 @@ class AudioPlayer:
             if dpg.does_item_exist("plot_display_table"):
                 with dpg.table_row(tag=f"display_row_{i}", parent="plot_display_table", height=650):
                     with dpg.group(horizontal=False):
-                        #TODO make this dynamic to the number of waveform plots being added
-                        # plot the extra waveform
-                        with dpg.plot(tag=f"extra_waveform_{i}", height=300, width=-1):
+                        # TODO: allow user to select what types of data they want displayed on this page
+                        # making it dynamic created a glitch, I think due to having a loop within a "with" block
+                        # TODO: find another way to make more dynamic without a for loop (eg: always creating each plot, but setting visibility)
+
+                        # plot the waveforms
+                        with dpg.plot(tag=f"waveform_{i}_0", height=300, width=-1):
                             x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_0")
                             y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Arbitrary Data", tag=f"y_axis_{i}_0")
                             dpg.add_line_series(time, .5*np.sin(5*time), label="Arbitrary Data", parent=y_axis)
-
                             # fix time and amplitude so that the user can't scroll around
                             dpg.set_axis_limits(f"x_axis_{i}_0", min_time, max_time)
                             dpg.set_axis_limits(f"y_axis_{i}_0", -1, 1)
-                        # plot the audio waveform
-                        with dpg.plot(tag=f"audio_waveform_{i}", height=300, width=-1):
+                        with dpg.plot(tag=f"waveform_{i}_1", height=300, width=-1):
                             x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=f"x_axis_{i}_1")
                             y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Audio Signal", tag=f"y_axis_{i}_1")
                             dpg.add_line_series(time, chunk_samples_audio, label="Audio Signal", parent=y_axis)
-
                             # fix time and amplitude so that the user can't scroll around
                             dpg.set_axis_limits(f"x_axis_{i}_1", min_time, max_time)
                             dpg.set_axis_limits(f"y_axis_{i}_1", -1, 1)
-                        
-                
+
             else:
                 print("Error: Table 'plot_display_table' not found")
                 return
@@ -178,7 +201,8 @@ class AudioPlayer:
         self.plot_cursors.clear()
         for i in range (self.plots_per_row):
             cursor_tag = f"playback_cursor_{i}"
-            dpg.add_inf_line_series([0], tag=cursor_tag, label="vertical line", parent=f"y_axis_{row_number}_{i}")
+            new_line = dpg.add_inf_line_series([0], tag=cursor_tag, label="vertical line", parent=f"y_axis_{row_number}_{i}")
+            dpg.bind_item_theme(new_line, self.cursor_red)
             self.plot_cursors.append(cursor_tag)
             dpg.set_value(cursor_tag, [[x_value]])
 
@@ -251,10 +275,6 @@ class AudioPlayer:
             dur_seconds = self.get_seconds_remainder(self.loaded_audio["duration"])
             dpg.set_value("playtime_status_text", f"{minutes:02d}:{seconds:02d}/{dur_minutes:02d}:{dur_seconds:02d}")
 
-    def update_hover_cursor(self, app_data, plot_data):
-        print(f"appdata is {app_data}")
-        print(f"plot_data is {plot_data}")
-
     def update_cursor_motion(self):
         if self.loaded_audio:
             if not self.loaded_audio["is_playing"]:
@@ -275,11 +295,39 @@ class AudioPlayer:
             for cursor_id in self.plot_cursors:
                 dpg.set_value(cursor_id, [[pos]])
 
+    # on mousemove, if hovering over a plot, create a new cursor at position
+    def update_hover_cursor(self, app_data):
+        # delete any previous hover cursors
+        for cursor_id in self.hover_cursors:
+            dpg.delete_item(cursor_id)
+        self.hover_cursors.clear()
+        # loop over plots, determine if any of them have mouse hovering
+        for i in range(self.rows_in_table):
+            for j in range(self.plots_per_row):
+                plot_id = f"waveform_{i}_{j}"
+                # if plot has hover, create a new cursor on all plots in that row using that x coordinate
+                if dpg.is_item_hovered(plot_id):
+                    mouse_pos = dpg.get_plot_mouse_pos()
+                    for k in range(self.plots_per_row):
+                        self.hover_cursors.append(dpg.add_inf_line_series([mouse_pos[0]], label="vertical line", parent=f"y_axis_{i}_{k}", tag=f"hover_cursor_{i}_{k}"))
+                        dpg.bind_item_theme(f"hover_cursor_{i}_{k}", self.cursor_gray)
+                    return
+
+    # on mouseup, if there's a hover cursor, jump to that position
+    def jump_to_hover_pos(self):
+        # mouse is not on the plot
+        if len(self.hover_cursors) == 0:
+            return
+        x_pos = dpg.get_value(self.hover_cursors[0])[0][0]
+        self.create_cursor_set(0, x_pos)
+        self.loaded_audio["current_time_index"] = x_pos * 1000
+        self.update_position_label()
+        self.set_is_playing(False)
+
     def update_callback(self):
         if self.loaded_audio and "is_playing" in self.loaded_audio and self.loaded_audio["is_playing"]:
             self.update_position_label()
             self.update_cursor_motion()
-
 
     def run(self):
         while dpg.is_dearpygui_running():
