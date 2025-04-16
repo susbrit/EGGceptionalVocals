@@ -40,7 +40,15 @@ def map_data(pitches, cqs):
         for i in pitch_indices:
             cq_vals.append(cqs[i])
         pitch2cq_dict[pitch] = np.round( np.mean(cq_vals), 2 )
-    return pitch2cq_dict
+    
+    # format mapping into tuples
+    pitch2cq_map = []
+    for pitch in pitch2cq_dict:
+        cq = pitch2cq_dict[pitch]
+        pitch2cq_map.append( (pitch, cq) )
+
+    pprint.pp(pitch2cq_map)
+    return pitch2cq_map
 
 # Output processed time, pitch, and cq data
 def proc_data(pitch_file_path, cq_file_path):
