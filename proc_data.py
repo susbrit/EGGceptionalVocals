@@ -35,7 +35,6 @@ def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
         os.mkdir(path)
 
     filepath = path + date + '.csv'
-
     header = ['Time', 'Pitch', 'CQ']
     with open(filepath, 'w') as new_rep:
         writer = csv.writer(new_rep, delimiter=',')
@@ -58,6 +57,41 @@ def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
 
     return
 
+def retrieve_repertoire(user, rep_name, date):
+    times = []
+    pitches = []
+    cqs = []
+    path = get_path(user, 1, rep_name)
+    filepath = path + date + '.csv'
+    try:
+        with open(filepath, newline='') as f:
+            reader = csv.reader(f)
+            rows = list(reader) 
+
+    except:
+        if not os.path.exists(filepath):
+            print('Error: File', filepath, 'does not exist')
+        else:
+            print('Error: Unknown')
+
+    n = len(rows)
+    for i in range(1, n):
+        row = rows[i]
+        times.append(row[0])
+        pitches.append(row[1])
+        cqs.append(row[2])
+
+    return times, pitches, cqs
+
 # Quick run
 
 new_repertoire(user, rep_name, rep_freq_data, rep_cq_data)
+
+times, pitches, cqs = retrieve_repertoire(user, rep_name, date)
+
+print("\n\nTimes:\n")
+pprint.pp(times)
+print("\n\nPitches:\n")
+pprint.pp(pitches)
+print("\n\nCQs:\n")
+pprint.pp(cqs)
