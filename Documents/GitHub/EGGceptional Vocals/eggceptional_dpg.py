@@ -9,7 +9,12 @@ import pandas as pd
 import sqlite3
 
 open_window = None
-defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW"]
+defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW"]
+
+# TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
+loaded_cq_file = None
+loaded_audio_file = None
+loaded_file_name = ""
 
 # switch from open_window to window "switching_to"
 # where "switching_to" is a string from global array defined_windows
@@ -17,28 +22,31 @@ def switch_window(switching_to):
   global open_window
   global defined_windows
   if switching_to not in defined_windows:
-    print(f"ERROR: window f{switching_to} does not exist!")
+    print(f"ERROR: window {switching_to} does not exist!")
     return
 
   # first, close existing window
   # switching_from may equal None on app initialization
   if open_window != None:
+    if switching_to == open_window.get_window_id():
+      print(f"Hmm, you tried to open {switching_to} multiple times in a row")
+      return
     try:
+      # TODO: dpg delete all children of primary window?
       open_window.hide()
     except:
       print("ERROR: could not hide open window?")
 
   # now open new window
   new_window = None
-  try:
-    if switching_to == "PLAYBACK_WINDOW":
-      new_window = AudioPlayer()
-    elif switching_to == "WELCOME_WINDOW":
-      new_window = WelcomeScreen()
-    elif switching_to == "LIBRARY_WINDOW":
-      new_window = LibraryWindow()
-  except:
-    print(f"ERROR: we don't like switching to ")
+  if switching_to == "PLAYBACK_WINDOW":
+    new_window = AudioPlayer()
+  elif switching_to == "WELCOME_WINDOW":
+    new_window = WelcomeScreen()
+  elif switching_to == "LIBRARY_WINDOW":
+    new_window = LibraryWindow()
+  elif switching_to == "ADD_RECORDING_WINDOW":
+    new_window = AddRecordingWindow()
   
   open_window = new_window
 
@@ -52,7 +60,7 @@ class AudioPlayer:
   loaded_audio = dict()
   """
   loaded_audio = {
-      "file_details",
+      "file_path_name",
       "is_playing",
       "duration",
       "current_time_index",
@@ -78,20 +86,15 @@ class AudioPlayer:
   def __init__(self):
     pygame.mixer.init()
     with dpg.child_window(tag="Audio Player Window", parent="Primary Window"):
-        with dpg.file_dialog(directory_selector=False, show=False, callback=self.audio_file_selected, id="audio_file_dialog", width=700 ,height=400):
-            dpg.add_file_extension("Source files (*.mp3 *.wav){.mp3,.wav}", color=(0, 255, 255, 255))
-        dpg.add_button(label="File Selector", callback=lambda: dpg.show_item("audio_file_dialog"))
-        dpg.add_text(default_value="", tag="selected_file_name")
+        dpg.add_text(default_value=f"{loaded_file_name}", tag="selected_file_name")
         with dpg.child_window(tag="waveform_plot", width=-1):
-            dpg.add_text("No file selected. Please load an audio file.", tag="no_file_text")
             with dpg.table(header_row=False, tag="plot_display_table", width=-1, borders_innerH=True):
                 dpg.add_table_column()
 
-        with dpg.child_window(tag="bottom_bar", width=-1, height=50):
+        with dpg.child_window(tag="bottom_bar", width=-1, height=self.BOTTOM_PANEL_HEIGHT):
             dpg.add_button(label="Play", tag="play_button", callback=self.toggle_play_pause)
             dpg.add_text("00:00/00:00", tag="playtime_status_text")
             dpg.add_button(label="Reset", tag="reset_play_button", callback=self.reset_play)
-        dpg.add_button(label="Back to Menu", callback=self.back_to_menu)
 
     with dpg.theme() as self.cursor_red:
         with dpg.theme_component():
@@ -100,6 +103,11 @@ class AudioPlayer:
     with dpg.theme() as self.cursor_gray:
         with dpg.theme_component():
             dpg.add_theme_color(dpg.mvPlotCol_Line, (100, 100, 100, 255), category=dpg.mvThemeCat_Plots)
+    self.on_window_resize()
+    self.audio_file_selected()
+
+  def get_window_id(self):
+    return "PLAYBACK_WINDOW"
 
   # TEMP FUNCTION
   def back_to_menu(self):
@@ -116,7 +124,7 @@ class AudioPlayer:
       self.update_cursor_motion()
 
   def on_window_resize(self):
-    # keep waveform window above bottom panel
+    # keep waveform window above bottom panel TODO currently this is alchemy
     new_height = dpg.get_viewport_height() - 2.25*self.BOTTOM_PANEL_HEIGHT
     dpg.set_item_height("waveform_plot", new_height)
     # center play button & playtime text
@@ -205,29 +213,25 @@ class AudioPlayer:
     # use the name of the cursor tag to extract the row number to jump to
     row_num = int(self.hover_cursors[0].split('_')[2])
     self.create_cursor_set(row_num, x_pos)
+    self.set_is_playing(False)
     self.loaded_audio["current_time_index"] = x_pos * 1000
     self.update_position_label()
-    self.set_is_playing(False)
 
   # generates visual of waveform for the selected audio file
   # splits waveform into separate rows if necessary (based on SECONDS_PER_ROW)
-  def audio_file_selected(self, sender, app_data):
-      if not app_data["file_path_name"]:
-          return
-
+  # TODO: move this into init/make it less monstrous (clearing no longer necessary)
+  def audio_file_selected(self):
       self.plot_cursors.clear()
       self.hover_cursors.clear()
       self.rows_in_table = 0
       self.plots_per_row = 0
       self.loaded_audio.clear()
-      self.loaded_audio["file_details"] = app_data
+      self.loaded_audio["file_path_name"] = loaded_audio_file
+      self.loaded_audio["is_playing"] = False
       self.loaded_audio["current_time_index"] = 0
-      self.set_is_playing(False)
-      # Generate label with audio file name
-      dpg.set_value("selected_file_name", app_data["file_name"])
 
       # Load the audio file
-      audio = AudioSegment.from_file(app_data["file_path_name"])
+      audio = AudioSegment.from_file(loaded_audio_file)
       samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
       if audio.channels > 1:
           samples = samples.reshape(-1, audio.channels)[:, 0].copy()  
@@ -244,7 +248,7 @@ class AudioPlayer:
       num_lines = math.ceil(duration / self.SECONDS_PER_ROW)
 
       # process input CQ spreadsheet
-      cq_file = pd.read_excel('unknown_test_cq.xlsx')
+      cq_file = pd.read_excel(loaded_cq_file)
       cq_time = np.array(cq_file.iloc[:, 0].tolist())
       cq_values = np.array(cq_file.iloc[:, 1].tolist())
 
@@ -254,7 +258,6 @@ class AudioPlayer:
       # Clear previous plots (if any exist)
       dpg.delete_item("plot_display_table", children_only=True)
       dpg.add_table_column(parent="plot_display_table")
-      dpg.hide_item("no_file_text")
 
       self.plots_per_row = 2 # TEMP hard coded for demo
       self.rows_in_table = num_lines
@@ -290,11 +293,12 @@ class AudioPlayer:
                       with dpg.plot(tag=f"waveform_{i}_0", height=300, width=-1):
                           x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_0")
                           y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Closed Quotient", tag=f"y_axis_{i}_0")
+                          dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.00", 1)))
                           #dpg.add_line_series(time, .5*np.sin(5*time), label="Arbitrary Data", parent=y_axis)
                           dpg.add_line_series(cq_time_chunk, cq_value_chunk, label="Closed Quotient", parent=y_axis)
                           # fix time and amplitude so that the user can't scroll around
                           dpg.set_axis_limits(f"x_axis_{i}_0", min_time, max_time)
-                          dpg.set_axis_limits(f"y_axis_{i}_0", -1, 1)
+                          dpg.set_axis_limits(f"y_axis_{i}_0", 0, 1)
                       with dpg.plot(tag=f"waveform_{i}_1", height=300, width=-1):
                           x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=f"x_axis_{i}_1")
                           y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Audio Signal", tag=f"y_axis_{i}_1")
@@ -328,13 +332,17 @@ class AudioPlayer:
   def set_is_playing(self, playing_value):
     if self.loaded_audio == None:
       return
+
+    # ignore duplicate settings
+    if "is_playing" in self.loaded_audio and self.loaded_audio["is_playing"] == playing_value:
+      return
     self.loaded_audio["is_playing"] = playing_value
     # play music
     if playing_value:
       dpg.set_item_label("play_button", "Pause")
       if self.loaded_audio["current_time_index"] == None:
           self.loaded_audio["current_time_index"] = 0
-      pygame.mixer.music.load(self.loaded_audio["file_details"]["file_path_name"])
+      pygame.mixer.music.load(self.loaded_audio["file_path_name"])
       pygame.mixer.music.play(start=self.loaded_audio["current_time_index"]/1000)  # Convert ms to seconds
     # pause music
     else:
@@ -374,10 +382,79 @@ class AudioPlayer:
   def get_seconds_remainder (self, ms_value):
     return int((ms_value % 60000) // 1000)
 
-class LibaryWindow:
+# window where user can add a new recording (CQ, audio, or both)
+# TODO: expand to allow editing details of a preexisting recording
+class AddRecordingWindow:
+  selected_cq_file = None
+  selected_audio_file = None
+  def __init__(self):
+    with dpg.child_window(tag="Add Recording Window", parent="Primary Window"):
+      dpg.add_text("Add a new recorded piece to your repertoire library:")
+
+      dpg.add_text("\n\nNo CQ file selected.", tag="cq_file_name")
+      dpg.add_button(label="Select CQ data file", callback=lambda: dpg.show_item("cq_file_dialog"))
+
+      dpg.add_text("\n\nNo audio file selected.", tag="audio_file_name")
+      dpg.add_button(label="Select audio data file", callback=lambda: dpg.show_item("audio_file_dialog"))
+
+      dpg.add_text("\n\nGive your piece a name:")
+      dpg.add_input_text(hint="Untitled Piece", tag="title_input")
+
+      dpg.add_text("\n\n")
+      dpg.add_button(label="Submit", callback=self.submit_data)
+
+      with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_audio, id="audio_file_dialog", width=700 ,height=400):
+            dpg.add_file_extension("Source files (*.mp3 *.wav){.mp3,.wav}", color=(0, 255, 255, 255))
+      with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_cq, id="cq_file_dialog", width=700 ,height=400):
+            dpg.add_file_extension("Source files (*.xlsx){.xlsx}", color=(0, 255, 255, 255))
+
+  def get_window_id(self):
+    return "ADD_RECORDING_WINDOW"
+
+  def select_cq(self, sender, app_data):
+    if not app_data["file_path_name"]:
+      return
+    file_path_name = app_data["file_path_name"]
+    file_name = app_data["file_name"]
+    self.selected_cq_file = file_path_name
+    dpg.set_value("cq_file_name", f"\n\n{file_name}")
+
+  def select_audio(self, sender, app_data):
+    if not app_data["file_path_name"]:
+      return
+    file_path_name = app_data["file_path_name"]
+    file_name = app_data["file_name"]
+    self.selected_audio_file = file_path_name
+    dpg.set_value("audio_file_name", f"\n\n{file_name}")
+
+  def submit_data(self):
+    global loaded_cq_file
+    global loaded_audio_file
+    global loaded_file_name
+    # TODO: make it so you can select one or the other, doesn't have to be both
+    if self.selected_audio_file == None or self.selected_cq_file == None:
+      print("Couldn't open playback page without file input")
+      return
+      # error message popup - current code causes a segfault
+      # with dpg.window(label="Submission Error", modal=True, no_close=True, tag="SubmitErrorPopup"):
+      #       dpg.add_text("You must select a file for either CQ data or audio.")
+      #       dpg.add_button(label="Ok", width=75, callback=dpg.delete_item("SubmitErrorPopup"))
+    
+    loaded_cq_file = self.selected_cq_file
+    loaded_audio_file = self.selected_audio_file
+    loaded_file_name = dpg.get_value("title_input")
+    switch_window("PLAYBACK_WINDOW")
+
+  def hide(self):
+    dpg.delete_item("Add Recording Window")
+
+class LibraryWindow:
   def __init__(self):
     with dpg.child_window(tag="Library Window", parent="Primary Window"):
-      dpg.add_text("Your Repertoire Library")
+      dpg.add_text("Your Repertoire Library...has not been implemented yet D:")
+
+  def get_window_id(self):
+    return "LIBRARY_WINDOW"
 
   def hide(self):
     dpg.delete_item("Library Window")
@@ -386,13 +463,23 @@ class WelcomeScreen:
   def __init__(self):
     with dpg.child_window(label="Welcome", tag="Welcome Window", parent="Primary Window"):
       dpg.add_text("Welcome to EGGceptional Vocals!")
-      dpg.add_button(label="Go to Player", callback=self.create_audio_player_window)
+      dpg.add_button(label="Add a new recording", callback=self.create_add_recording_window)
+      dpg.add_button(label="View your repertoire", callback=self.create_library_window)
 
-  def create_audio_player_window(self):
-    if dpg.does_item_exist("Audio Player Window"):
-      print("ERROR: we already created an audio player window, but now you're asking for another one...")
-      return
-    switch_window("PLAYBACK_WINDOW")
+  # def create_audio_player_window(self):
+  #   if dpg.does_item_exist("Audio Player Window"):
+  #     print("ERROR: we already created an audio player window, but now you're asking for another one...")
+  #     return
+  #   switch_window("PLAYBACK_WINDOW")
+
+  def get_window_id(self):
+    return "WELCOME_WINDOW"
+
+  def create_add_recording_window(self):
+    switch_window("ADD_RECORDING_WINDOW")
+
+  def create_library_window(self):
+    switch_window("LIBRARY_WINDOW")
 
   def hide(self):
     dpg.delete_item("Welcome Window")
@@ -404,15 +491,9 @@ class AppManager:
     dpg.create_viewport(title='Test App', width=600, height=400)
     with dpg.window(tag="Primary Window"):
         with dpg.menu_bar():
-            with dpg.menu(label="Setup"):
-                dpg.add_menu_item(label="Tutorial")
-                dpg.add_menu_item(label="Calibration")
-
-            with dpg.menu(label="Record"):
-                dpg.add_menu_item(label="CQ Warmup")
-                dpg.add_menu_item(label="Repertoire")
-            
-            dpg.add_menu_item(label="Playback Library")
+          dpg.add_menu_item(label="Home", callback=self.switch_to_welcome)
+          dpg.add_menu_item(label="Add Recording", callback=self.switch_to_add_recording)
+          dpg.add_menu_item(label="Library", callback=self.switch_to_library)
 
     with dpg.handler_registry():
         dpg.add_mouse_move_handler(callback=self.update_mouse_move)
@@ -421,7 +502,7 @@ class AppManager:
     # open the welcome window
     switch_window("WELCOME_WINDOW")
 
-    dpg.setup_dearpygui()  # <- this should not segfault
+    dpg.setup_dearpygui() 
     dpg.show_viewport()
     dpg.set_primary_window("Primary Window", True)
 
@@ -429,6 +510,18 @@ class AppManager:
     dpg.set_viewport_resize_callback(self.update_window_size)
     
     self.update_window_size()
+
+  def switch_to_welcome(self):
+    print("switch to welcome")
+    switch_window("WELCOME_WINDOW")
+
+  def switch_to_add_recording(self):
+    print("switch to add recording")
+    switch_window("ADD_RECORDING_WINDOW")
+
+  def switch_to_library(self):
+    print("switch to library")
+    switch_window("LIBRARY_WINDOW")
 
   def update_window_size(self):
     # if there's an open window with its own resize function, execute here
