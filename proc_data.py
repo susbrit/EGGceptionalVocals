@@ -9,6 +9,14 @@ user = "Izzy"
 rep_name = "Izzy C Major Scale Mic Only"
 rep_freq_data = "data/Izzy C Major Scale Mic Only.xlsx"
 rep_cq_data = "data/CQ Unknown Test - Sheet1.csv"
+date = '04-10-2025'
+
+def get_path(user, rep, rep_name=None):
+    if rep:
+        path = 'db/' + user + '/' + 'library/' + rep_name + '/'
+    else:
+        path = 'db/' + user + '/' + 'warmup/'
+    return path
 
 # Output processed time, pitch, and cq data into a file
 def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
@@ -22,12 +30,11 @@ def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
     cqs.append(0.0)
 
     # Write processed data into new csv file
-    date = '04-10-2025'
-    path = 'db/' + user + '/' + rep_name
+    path = get_path(user, 1, rep_name)
     if not os.path.exists(path):
         os.mkdir(path)
 
-    filepath = path + '/' + date + '.csv'
+    filepath = path + date + '.csv'
 
     header = ['Time', 'Pitch', 'CQ']
     with open(filepath, 'w') as new_rep:
@@ -54,12 +61,3 @@ def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
 # Quick run
 
 new_repertoire(user, rep_name, rep_freq_data, rep_cq_data)
-
-'''
-print("\n\nTimes:\n")
-pprint.pp(times)
-print("\n\nPitches:\n")
-pprint.pp(pitches)
-print("\n\nCQs:\n")
-pprint.pp(cqs)
-'''
