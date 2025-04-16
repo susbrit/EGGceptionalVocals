@@ -1,14 +1,5 @@
 import csv
-import openpyxl
-import pprint
 import numpy as np
-from pitch import proc_freq_data
-
-# hardcoded wb file
-#wb = openpyxl.load_workbook('data/Izzy C Major Scale Mic Only.xlsx')
-#times, pitches = proc_freq_data(wb, 40)
-
-#filename = 'data/CQ Unknown Test - Sheet1.csv'
 
 def get_cq_avg(cq_times, cqs):
     cqs_res = []
@@ -56,7 +47,3 @@ def proc_cq_data(times, filename):
     
     cqs_res = get_cq_avg(cq_times, cqs)
     return cqs_res
-
-#cqs_res = proc_cq_data(times, filename)
-
-#pprint.pp(cqs_res)
