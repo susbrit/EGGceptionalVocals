@@ -18,6 +18,14 @@ def get_path(user, rep, rep_name=None):
         path = 'db/' + user + '/' + 'warmup/'
     return path
 
+def trim_data(times, pitches, cqs):
+    lens = [len(times), len(pitches), len(cqs)]
+    shortlen = min(lens)
+    times_res = times[:shortlen]
+    pitches_res = pitches[:shortlen]
+    cqs_res = cqs[:shortlen]
+    return times_res, pitches_res, cqs_res
+
 # Output processed time, pitch, and cq data into a file
 def proc_new_data(user, rep, freq_data_wb, cq_data, rep_name=None):
     freq_step = 40
@@ -26,8 +34,8 @@ def proc_new_data(user, rep, freq_data_wb, cq_data, rep_name=None):
     times, pitches = pitch.proc_freq_data(freq_data, freq_step)
     cqs = cq.proc_cq_data(times, cq_data)
     # TODO: DELETE!
-    cqs.append(0.0)
-    cqs.append(0.0)
+    #cqs.append(0.0)
+    #cqs.append(0.0)
 
     # Write processed data into new csv file
     if rep:
@@ -57,6 +65,11 @@ def proc_new_data(user, rep, freq_data_wb, cq_data, rep_name=None):
                 print('Warning: Mismatch of shapes for times and CQs')
                 print(len(times))
                 print(len(cqs))
+
+                times, pitches, cqs = trim_data(times, pitches, cqs)
+                n = len(times)
+                for i in range(0, n):
+                    writer.writerow({'Time': times[i], 'Pitch': pitches[i], 'CQ': cqs[i]})
 
     return
 
