@@ -7,8 +7,8 @@ import os
 
 user = "Izzy"
 rep_name = "Izzy C Major Scale Mic Only"
-rep_freq_data = "data/Izzy C Major Scale Mic Only.xlsx"
-rep_cq_data = "data/CQ Unknown Test - Sheet1.csv"
+freq_data = "data/Izzy C Major Scale Mic Only.xlsx"
+cq_data = "data/CQ Unknown Test - Sheet1.csv"
 date = '04-10-2025'
 
 def get_path(user, rep, rep_name=None):
@@ -19,27 +19,30 @@ def get_path(user, rep, rep_name=None):
     return path
 
 # Output processed time, pitch, and cq data into a file
-def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
+def proc_new_data(user, rep, freq_data_wb, cq_data, rep_name=None):
     freq_step = 40
-    freq_data = openpyxl.load_workbook(rep_freq_data)
+    freq_data = openpyxl.load_workbook(freq_data_wb)
 
     times, pitches = pitch.proc_freq_data(freq_data, freq_step)
-    cqs = cq.proc_cq_data(times, rep_cq_data)
+    cqs = cq.proc_cq_data(times, cq_data)
     # TODO: DELETE!
     cqs.append(0.0)
     cqs.append(0.0)
 
     # Write processed data into new csv file
-    path = get_path(user, 1, rep_name)
-    if not os.path.exists(path):
-        os.mkdir(path)
+    if rep:
+        path = get_path(user, 1, rep_name)
+        if not os.path.exists(path):
+            os.mkdir(path)
+    else:
+        path = get_path(user, 0)
 
     filepath = path + date + '.csv'
     header = ['Time', 'Pitch', 'CQ']
-    with open(filepath, 'w') as new_rep:
-        writer = csv.writer(new_rep, delimiter=',')
+    with open(filepath, 'w') as new_data:
+        writer = csv.writer(new_data, delimiter=',')
         header = ["Time", "Pitch", "CQ"]
-        writer = csv.DictWriter(new_rep, fieldnames=header)
+        writer = csv.DictWriter(new_data, fieldnames=header)
         writer.writeheader()
 
         n = len(times)
@@ -57,11 +60,16 @@ def new_repertoire(user, rep_name, rep_freq_data, rep_cq_data):
 
     return
 
-def retrieve_repertoire(user, rep_name, date):
+def retrieve_data(user, rep, date, rep_name=None):
     times = []
     pitches = []
     cqs = []
-    path = get_path(user, 1, rep_name)
+    
+    if rep:
+        path = get_path(user, 1, rep_name)
+    else:
+        path = get_path(user, 0)
+        
     filepath = path + date + '.csv'
     try:
         with open(filepath, newline='') as f:
@@ -85,9 +93,9 @@ def retrieve_repertoire(user, rep_name, date):
 
 # Quick run
 
-new_repertoire(user, rep_name, rep_freq_data, rep_cq_data)
+proc_new_data(user, 0, freq_data, cq_data, rep_name=None)
 
-times, pitches, cqs = retrieve_repertoire(user, rep_name, date)
+times, pitches, cqs = retrieve_data(user, 0, date, rep_name=None)
 
 print("\n\nTimes:\n")
 pprint.pp(times)
