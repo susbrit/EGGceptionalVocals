@@ -31,6 +31,8 @@ def create_tree():
     tree = IntervalTree.from_tuples(ivs)
     return tree
 
+pitch_tree = create_tree()
+
 def get_pitch(freq):
         res = pitch_tree[freq]
         pitch = list(res).pop()[2]
@@ -100,28 +102,25 @@ def proc_freq_data(wb, step):
         else:
             times_res.append(times1[i])
             pitches_res.append(pitches1[i])
+
+        # Remove repeated data entries
+        if times_res[-1] == times_res[-2]:
+            times_res.pop()
+            pitches_res.pop()
     
     return times_res, pitches_res
 
+'''
 # Quick run of pitch analysis
 
-pitch_tree = create_tree()
 
 # hardcoded wb file
 wb = openpyxl.load_workbook('data/Izzy C Major Scale Mic Only.xlsx')
 
-'''
-for step in range(20, 100):
-    print("STEP = " + str(step) + '\n')
-    times, pitches = proc_freq_data(wb, step)
-
-    pprint.pp("times:\n" + str(times))
-    pprint.pp(pitches)
-    print('\n')
-'''
 times, pitches = proc_freq_data(wb, 40)
 
 print("times:\n")
 pprint.pp(times)
 print("pitches: \n")
 pprint.pp(pitches)
+'''
