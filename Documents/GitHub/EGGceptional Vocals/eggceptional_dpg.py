@@ -11,6 +11,12 @@ import sqlite3
 open_window = None
 defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW"]
 
+#sqlite database
+db = None
+
+# id of recording currently loaded
+loaded_recording_id = -1
+
 # TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
 loaded_cq_file = None
 loaded_audio_file = None
@@ -59,6 +65,131 @@ def switch_window(switching_to):
   
   open_window = new_window
 
+# basic sqlite database to keep track of user's repertoire
+class RepertoireDatabase:
+  def __init__(self, db_name="repertoire.db"):
+    self.db_name = db_name
+    self.create_tables()
+
+  def create_tables(self):
+    with sqlite3.connect(self.db_name) as conn:
+      cursor = conn.cursor()
+      # songs table: this contains each possible song, of which there can be any number of recordings 
+      cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Songs (
+          song_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          song_name TEXT NOT NULL
+        )
+      """)
+      # recordings table: each individual recording corresponds to a different song
+      cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Recordings (
+          recording_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          song_id INTEGER NOT NULL,
+          recording_name TEXT NOT NULL,
+          date TEXT NOT NULL,
+          cq_file_path TEXT NOT NULL,
+          pitch_file_path TEXT NOT NULL,
+          audio_file_path TEXT NOT NULL,
+          FOREIGN KEY (song_id) REFERENCES Songs (song_id) ON DELETE CASCADE
+        )
+      """)
+      conn.commit()
+
+  def insert_song(self, song_name):
+    with sqlite3.connect(self.db_name) as conn:
+      cursor = conn.cursor()
+      cursor.execute("INSERT INTO Songs (song_name) VALUES (?)", (song_name,))
+      conn.commit()
+      return cursor.lastrowid
+
+  def insert_recording(self, song_id, recording_name, date, cq_file_path, pitch_file_path, audio_file_path):
+    with sqlite3.connect(self.db_name) as conn:
+      cursor = conn.cursor()
+      cursor.execute(
+        "INSERT INTO Recordings (song_id, recording_name, date, cq_file_path, pitch_file_path, audio_file_path) VALUES (?, ?, ?, ?, ?, ?)",
+        (song_id, recording_name, date, cq_file_path, pitch_file_path, audio_file_path)
+      )
+      conn.commit()
+      return cursor.lastrowid
+
+  def get_all_songs(self):
+    with sqlite3.connect(self.db_name) as conn:
+      cursor = conn.cursor()
+      cursor.execute("SELECT song_id, song_name FROM Songs")
+      songs = cursor.fetchall()
+      return songs
+      # result = []
+      # for song in songs:
+      #   result.append(song_info)
+      # return result
+
+  # returns array with details for all recordings corresponding to a given song
+  def get_recordings_from_song(self, song_id):
+    with sqlite3.connect(self.db_name) as conn:
+      cursor = conn.cursor()
+      # Get all recordings for this song
+      cursor.execute(
+        "SELECT recording_id, recording_name, date FROM Recordings WHERE song_id = ?",
+        (song_id,)
+      )
+      recordings = cursor.fetchall()
+      return [
+          {"recording_id": r[0], "recording_name": r[1], "date": r[2], "file_path": r[3]} for r in recordings
+        ]
+
+  def get_all_recordings(self):
+    try:
+      with sqlite3.connect(self.db_name) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+          SELECT r.recording_id, r.recording_name, r.date, s.song_name
+          FROM Recordings r
+          JOIN Songs s ON r.song_id = s.song_id
+          ORDER BY r.date DESC
+        """)
+        recordings = cursor.fetchall()
+        return [
+          {
+            "recording_id": r[0],
+            "recording_name": r[1],
+            "date": r[2],
+            "song_name": r[3]
+          } for r in recordings
+        ]
+    except sqlite3.Error as e:
+      print(f"Error in get_all_recordings: {e}")
+      return []
+
+  # given id of recording, returns all details for that recording
+  def get_recording_by_id(self, recording_id):
+    try:
+      with sqlite3.connect(self.db_name) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+          SELECT r.recording_id, r.recording_name, r.date, r.cq_file_path, r.pitch_file_path, r.audio_file_path, r.song_id, s.song_name
+          FROM Recordings r
+          JOIN Songs s ON r.song_id = s.song_id
+          WHERE r.recording_id = ?
+        """, (recording_id,))
+        recording = cursor.fetchone()
+        if not recording:
+          print(f"No recording found for recording_id={recording_id}")
+          return None
+        return {
+          "recording_id": recording[0],
+          "recording_name": recording[1],
+          "date": recording[2],
+          "cq_file_path": recording[3],
+          "pitch_file_path": recording[4],
+          "audio_file_path": recording[5],
+          "song_id": recording[6],
+          "song_name": recording[7]
+        }
+    except sqlite3.Error as e:
+      print(f"Database error in get_recording_by_id: {e}")
+      return None
+
 class AudioPlayer:
   # CONSTANTS
   SECONDS_PER_ROW = 10
@@ -95,7 +226,7 @@ class AudioPlayer:
   def __init__(self):
     pygame.mixer.init()
     with dpg.child_window(tag="Audio Player Window", parent="Primary Window"):
-        dpg.add_text(default_value=f"{loaded_file_name}", tag="selected_file_name")
+        dpg.add_text(default_value="name unknown", tag="selected_file_name")
         with dpg.child_window(tag="waveform_plot", width=-1):
             with dpg.table(header_row=False, tag="plot_display_table", width=-1, borders_innerH=True):
                 dpg.add_table_column()
@@ -230,17 +361,27 @@ class AudioPlayer:
   # splits waveform into separate rows if necessary (based on SECONDS_PER_ROW)
   # TODO: move this into init/make it less monstrous (clearing no longer necessary)
   def audio_file_selected(self):
+      global db
+      global loaded_recording_id
+      # TODO these may be outdated
       self.plot_cursors.clear()
       self.hover_cursors.clear()
       self.rows_in_table = 0
       self.plots_per_row = 0
+
+      #load recording details given id
+      recording_details = db.get_recording_by_id(loaded_recording_id)
+
       self.loaded_audio.clear()
-      self.loaded_audio["file_path_name"] = loaded_audio_file
+      self.loaded_audio["file_path_name"] = recording_details['audio_file_path']
       self.loaded_audio["is_playing"] = False
       self.loaded_audio["current_time_index"] = 0
 
+      # set label for song
+      dpg.set_value("selected_file_name", f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
+
       # Load the audio file
-      audio = AudioSegment.from_file(loaded_audio_file)
+      audio = AudioSegment.from_file(self.loaded_audio["file_path_name"])
       samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
       if audio.channels > 1:
           samples = samples.reshape(-1, audio.channels)[:, 0].copy()  
@@ -257,12 +398,12 @@ class AudioPlayer:
       num_lines = math.ceil(duration / self.SECONDS_PER_ROW)
 
       # process input CQ spreadsheet
-      cq_file = pd.read_excel(loaded_cq_file)
+      cq_file = pd.read_excel(recording_details['cq_file_path'])
       cq_time = np.array(cq_file.iloc[:, 0].tolist())
       cq_values = np.array(cq_file.iloc[:, 1].tolist())
 
       # process input pitch spreadsheet
-      pitch_file = pd.read_excel(loaded_pitch_file)
+      pitch_file = pd.read_excel(recording_details['pitch_file_path'])
       pitch_time = np.array(pitch_file.iloc[:, 0].tolist())
       pitch_values = np.array(pitch_file.iloc[:, 1].tolist())
 
@@ -417,9 +558,16 @@ class AddRecordingWindow:
   selected_cq_file = None
   selected_audio_file = None
   selected_pitch_file = None
+  selected_song = None
   def __init__(self):
+    global db
     with dpg.child_window(tag="Add Recording Window", parent="Primary Window"):
       dpg.add_text("Add a new recorded piece to your repertoire library:")
+
+      dpg.add_text("\n\nWhat song is this a recording of?")
+      dpg.add_listbox(callback=self.select_song, tag="song_listbox")
+      dpg.add_input_text(hint="Create New Song", tag="new_song_input")
+      dpg.add_button(label="Add Song", callback=self.create_song)
 
       dpg.add_text("\n\nNo CQ file selected.", tag="cq_file_name")
       dpg.add_button(label="Select CQ data file", callback=lambda: dpg.show_item("cq_file_dialog"))
@@ -430,12 +578,13 @@ class AddRecordingWindow:
       dpg.add_text("\n\nNo audio file selected.", tag="audio_file_name")
       dpg.add_button(label="Select audio data file", callback=lambda: dpg.show_item("audio_file_dialog"))
 
-      dpg.add_text("\n\nGive your piece a name:")
-      dpg.add_input_text(hint="Untitled Piece", tag="title_input")
+      dpg.add_text("\n\nGive your recording a name:")
+      dpg.add_input_text(hint="Untitled Recording", tag="title_input")
 
       dpg.add_text("\n\n")
       dpg.add_button(label="Submit", callback=self.submit_data)
 
+      # TODO known issue where these aren't clearing properly from memory; need to delete them explicitly
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_audio, id="audio_file_dialog", width=700 ,height=400):
             dpg.add_file_extension("Source files (*.mp3 *.wav){.mp3,.wav}", color=(0, 255, 255, 255))
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_cq, id="cq_file_dialog", width=700 ,height=400):
@@ -443,8 +592,23 @@ class AddRecordingWindow:
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_pitch, id="pitch_file_dialog", width=700 ,height=400):
             dpg.add_file_extension("Source files (*.xlsx){.xlsx}", color=(0, 255, 255, 255))
 
+    self.set_song_list_values()
+
   def get_window_id(self):
     return "ADD_RECORDING_WINDOW"
+
+  def set_song_list_values(self):
+    # define values for song listbox 
+    dpg.configure_item("song_listbox", items=[song[1] for song in db.get_all_songs()])
+
+  def create_song(self, sender, app_data):
+    global db
+    db.insert_song(dpg.get_value("new_song_input"))
+    dpg.set_value("new_song_input", "")
+    self.set_song_list_values()
+
+  def select_song(self, sender, app_data):
+    self.selected_song = app_data
 
   def select_cq(self, sender, app_data):
     if not app_data["file_path_name"]:
@@ -471,23 +635,38 @@ class AddRecordingWindow:
     dpg.set_value("audio_file_name", f"\n\n{file_name}")
 
   def submit_data(self):
-    global loaded_cq_file
-    global loaded_pitch_file
-    global loaded_audio_file
-    global loaded_file_name
+    # global loaded_cq_file
+    # global loaded_pitch_file
+    # global loaded_audio_file
+    # global loaded_file_name
+    global loaded_recording_id
+    global db
     # TODO: make it so you can select one or the other, doesn't have to be both
-    if self.selected_audio_file == None or self.selected_cq_file == None:
-      print("Couldn't open playback page without file input")
+    if self.selected_audio_file == None or self.selected_cq_file == None or self.selected_pitch_file == None or self.selected_song == None:
+      print(f"Couldn't open playback page without file input (received: {self.selected_audio_file} {self.selected_cq_file} {self.selected_pitch_file} {self.selected_song}")
       return
-      # error message popup - current code causes a segfault
-      # with dpg.window(label="Submission Error", modal=True, no_close=True, tag="SubmitErrorPopup"):
-      #       dpg.add_text("You must select a file for either CQ data or audio.")
-      #       dpg.add_button(label="Ok", width=75, callback=dpg.delete_item("SubmitErrorPopup"))
     
-    loaded_cq_file = self.selected_cq_file
-    loaded_pitch_file = self.selected_pitch_file
-    loaded_audio_file = self.selected_audio_file
-    loaded_file_name = dpg.get_value("title_input")
+    # loaded_cq_file = self.selected_cq_file
+    # loaded_pitch_file = self.selected_pitch_file
+    # loaded_audio_file = self.selected_audio_file
+    # loaded_file_name = dpg.get_value("title_input")
+
+    #TODO make this more smooth if possible - currently, use sequencing of song name list to determine song_id - and it is not working?
+    song_id = -1
+    list_config = dpg.get_item_configuration("song_listbox")    
+    for i, item in enumerate(list_config['items']):        
+      if item == self.selected_song:
+        song_id = i+1
+        print(f"song_id: {song_id}")
+
+    # error finding matching id
+    if song_id == -1:
+      print("ERROR: could not determine song_id for selection")
+      return
+    
+    recording_title = dpg.get_value("title_input")
+    #TODO date generation/setting
+    loaded_recording_id = db.insert_recording(song_id, recording_title, "2025-04-16", self.selected_cq_file, self.selected_pitch_file, self.selected_audio_file)
     switch_window("PLAYBACK_WINDOW")
 
   def hide(self):
@@ -496,7 +675,42 @@ class AddRecordingWindow:
 class LibraryWindow:
   def __init__(self):
     with dpg.child_window(tag="Library Window", parent="Primary Window"):
-      dpg.add_text("Your Repertoire Library...has not been implemented yet D:")
+      dpg.add_text("All Your Recordings")
+      with dpg.table(
+        tag="recordings_table",
+        header_row=True,
+        borders_innerH=True,
+        borders_innerV=True,
+        borders_outerH=True,
+        borders_outerV=True,
+        resizable=True
+      ):
+        # Define columns
+        dpg.add_table_column(label="Song Name")
+        dpg.add_table_column(label="Recording Name")
+        dpg.add_table_column(label="Date")
+        dpg.add_table_column(label="Action")
+      self.populate_table()
+
+  def select_recording(self, sender, app_data, user_data):
+    global loaded_recording_id
+    loaded_recording_id = user_data
+    switch_window("PLAYBACK_WINDOW")
+
+  def populate_table(self):
+    global db
+    # Fetch recordings
+    recordings = db.get_all_recordings()
+    for rec in recordings:
+      with dpg.table_row(parent="recordings_table"):
+        dpg.add_text(rec["song_name"])
+        dpg.add_text(rec["recording_name"])
+        dpg.add_text(rec["date"])
+        dpg.add_button(
+          label="Select",
+          callback=self.select_recording,
+          user_data=rec["recording_id"]
+        )
 
   def get_window_id(self):
     return "LIBRARY_WINDOW"
@@ -585,15 +799,13 @@ class AppManager:
 
   def run(self):
     while dpg.is_dearpygui_running():
-        # if there's an open window with its own render_loop function, execute it here
-        
+      # if there's an open window with its own render_loop function, execute it here
       global open_window
       if hasattr(open_window, "on_render_loop"):
         open_window.on_render_loop()
       dpg.render_dearpygui_frame()
     dpg.destroy_context()
 
-
 if __name__ == "__main__":
-  # set up   
+  db = RepertoireDatabase()
   AppManager().run()
