@@ -7,6 +7,7 @@ import numpy as np
 import math
 import pandas as pd
 import sqlite3
+import proc_data
 
 open_window = None
 defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW"]
@@ -396,6 +397,14 @@ class AudioPlayer:
       dur_seconds = self.get_seconds_remainder(self.loaded_audio["duration"])
       dpg.set_value("playtime_status_text", f"00:00/{dur_minutes:02d}:{dur_seconds:02d}")
       num_lines = math.ceil(duration / self.SECONDS_PER_ROW)
+
+
+      # process input pitch and CQ spreadsheet
+      # TODO: Graph these values
+      times, pitches, cqs = proc_data.proc_data(
+        recording_details['pitch_file_path'],
+        recording_details['cq_file_path']
+      )
 
       # process input CQ spreadsheet
       cq_file = pd.read_excel(recording_details['cq_file_path'])
