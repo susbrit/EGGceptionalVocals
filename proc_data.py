@@ -6,18 +6,6 @@ import pprint
 # CONSTANTS
 TIME_STEP = 40
 
-pitch_file_path =  "data/Izzy C Major Scale Mic Only.xlsx"
-cq_file_path = "data/CQ Unknown Test - Sheet1.csv"
-
-'''
-def get_path(user, rep, rep_name=None):
-    if rep:
-        path = 'db/' + user + '/' + 'library/' + rep_name + '/'
-    else:
-        path = 'db/' + user + '/' + 'warmup/'
-    return path
-'''
-
 def trim_data(times, pitches, cqs):
     lens = [len(times), len(pitches), len(cqs)]
     shortlen = min(lens)
