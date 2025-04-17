@@ -104,7 +104,6 @@ def proc_freq_data(wb, step):
     times_res = []
     times_res.append(times1[0])
     pitches_res = []
-    pitches_res.append(pitches1[0])
     for i in range(1, len(pitches1)):
         if ( (pitches1[i] != pitches2[i]) & (pitches1[i] != pitches2[i-1]) ):
             times_res.append(times2[i])
