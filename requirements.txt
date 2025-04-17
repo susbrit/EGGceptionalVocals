@@ -1,0 +1,8 @@
+pyaudio
+dearpygui
+pygame
+pydub
+simpleaudio
+numpy
+intervaltree
+openpyxl
