@@ -598,6 +598,13 @@ class AddRecordingWindow:
   def get_window_id(self):
     return "ADD_RECORDING_WINDOW"
 
+  # dpg handles file dialogs differently than other components,
+  # so it's necessary to explicitly delete them to prevent errors
+  def hide(self):
+    dpg.delete_item("audio_file_dialog")
+    dpg.delete_item("cq_file_dialog")
+    dpg.delete_item("pitch_file_dialog")
+
   def set_song_list_values(self):
     # define values for song listbox 
     dpg.configure_item("song_listbox", items=[song[1] for song in db.get_all_songs()])
