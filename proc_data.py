@@ -12,6 +12,20 @@ pitch_file_path =  "data/Izzy C Major Scale Mic Only.xlsx"
 cq_file_path = "data/CQ Unknown Test - Sheet1.csv"
 '''
 
+def find_pitch_bounds(pitches):
+    freqs = []
+    for p in pitches:
+        freqs.append(pitch.get_freq(p))
+    
+    freq_lo = min(freqs)
+    freq_mid = np.median(freqs)
+    freq_hi = max(freqs)
+    pitch_lo = pitch.get_pitch(freq_lo)
+    pitch_mid = pitch.get_pitch(freq_mid)
+    pitch_hi = pitch.get_pitch(freq_hi)
+
+    return pitch_lo, pitch_mid, pitch_hi
+
 def trim_data(times, pitches, cqs):
     lens = [len(times), len(pitches), len(cqs)]
     shortlen = min(lens)
@@ -67,4 +81,5 @@ def proc_data(pitch_file_path, cq_file_path):
 # Quick run
 times, pitches, cqs = proc_data(pitch_file_path, cq_file_path)
 map_data(pitches, cqs)
+print(find_pitch_bounds(pitches))
 '''
