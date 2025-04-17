@@ -9,7 +9,7 @@ import pandas as pd
 import sqlite3
 
 open_window = None
-defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW"]
+defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW"]
 
 #sqlite database
 db = None
@@ -39,6 +39,9 @@ def switch_window(switching_to):
       print(f"Hmm, you tried to open {switching_to} multiple times in a row")
       return
     try:
+      # if a window needs any extra cleanup in addition to deletion
+      if hasattr(open_window, "hide"):
+        open_window.hide()
       # dpg delete all child windows of primary window
       children = dpg.get_item_children("Primary Window", 1)  # slot 1: all regular children
       if children:
@@ -46,9 +49,6 @@ def switch_window(switching_to):
               item_type = dpg.get_item_type(child)
               if item_type == "mvAppItemType::mvChildWindow":
                   dpg.delete_item(child)
-      #dpg.delete_item("Primary Window", children_only=True)
-      #TODO delete hide functions for windows since this system is better
-      #open_window.hide()
     except:
       print("ERROR: could not hide open window?")
 
@@ -62,6 +62,8 @@ def switch_window(switching_to):
     new_window = LibraryWindow()
   elif switching_to == "ADD_RECORDING_WINDOW":
     new_window = AddRecordingWindow()
+  elif switching_to == "TUTORIAL_WINDOW":
+    new_window = TutorialWindow()
   
   open_window = new_window
 
@@ -184,7 +186,7 @@ class RepertoireDatabase:
           "pitch_file_path": recording[4],
           "audio_file_path": recording[5],
           "song_id": recording[6],
-          "song_name": recording[7]
+          "song_name": recording[7],
         }
     except sqlite3.Error as e:
       print(f"Database error in get_recording_by_id: {e}")
@@ -255,7 +257,6 @@ class AudioPlayer:
 
   def hide(self):
     pygame.mixer.quit()
-    dpg.delete_item("Audio Player Window")
 
   # event-triggered functions, to be called by AppManager
   def on_render_loop(self):
@@ -449,7 +450,7 @@ class AudioPlayer:
                       # TODO: find another way to make more dynamic without a for loop (eg: always creating each plot, but setting visibility)
 
                       # plot the waveforms
-                      with dpg.plot(tag=f"waveform_{i}_0", height=300, width=-1):
+                      with dpg.plot(tag=f"waveform_{i}_0", height=260, width=-1):
                           x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_0")
                           y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Closed Quotient", tag=f"y_axis_{i}_0")
                           dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.00", 1)))
@@ -459,7 +460,7 @@ class AudioPlayer:
                           dpg.set_axis_limits(f"x_axis_{i}_0", min_time, max_time)
                           dpg.set_axis_limits(f"y_axis_{i}_0", 0, 1)
 
-                      with dpg.plot(tag=f"waveform_{i}_1", height=300, width=-1):
+                      with dpg.plot(tag=f"waveform_{i}_1", height=260, width=-1):
                           x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_1")
                           y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Pitch Frequency (Hz)", tag=f"y_axis_{i}_1")
                           dpg.set_axis_ticks(dpg.last_item(), ((" G3 ", 196), (" G4 ", 392)))
@@ -669,9 +670,6 @@ class AddRecordingWindow:
     loaded_recording_id = db.insert_recording(song_id, recording_title, "2025-04-16", self.selected_cq_file, self.selected_pitch_file, self.selected_audio_file)
     switch_window("PLAYBACK_WINDOW")
 
-  def hide(self):
-    dpg.delete_item("Add Recording Window")
-
 class LibraryWindow:
   def __init__(self):
     with dpg.child_window(tag="Library Window", parent="Primary Window"):
@@ -715,9 +713,6 @@ class LibraryWindow:
   def get_window_id(self):
     return "LIBRARY_WINDOW"
 
-  def hide(self):
-    dpg.delete_item("Library Window")
-
 class WelcomeScreen:
   def __init__(self):
     with dpg.child_window(label="Welcome", tag="Welcome Window", parent="Primary Window"):
@@ -740,9 +735,13 @@ class WelcomeScreen:
   def create_library_window(self):
     switch_window("LIBRARY_WINDOW")
 
-  def hide(self):
-    dpg.delete_item("Welcome Window")
+class TutorialWindow:
+  def __init__(self):
+    with dpg.child_window(tag="Tutorial Window", parent="Primary Window"):
+      dpg.add_text("Insert your tutorial here")
 
+  def get_window_id(self):
+    return "TUTORIAL_WINDOW"
 
 class AppManager:
   def __init__(self):
@@ -751,6 +750,7 @@ class AppManager:
     with dpg.window(tag="Primary Window"):
         with dpg.menu_bar():
           dpg.add_menu_item(label="Home", callback=self.switch_to_welcome)
+          dpg.add_menu_item(label="Tutorial", callback=self.switch_to_tutorial)
           dpg.add_menu_item(label="Add Recording", callback=self.switch_to_add_recording)
           dpg.add_menu_item(label="Library", callback=self.switch_to_library)
 
@@ -778,6 +778,9 @@ class AppManager:
 
   def switch_to_library(self):
     switch_window("LIBRARY_WINDOW")
+
+  def switch_to_tutorial(self):
+    switch_window("TUTORIAL_WINDOW")
 
   def update_window_size(self):
     # if there's an open window with its own resize function, execute here
