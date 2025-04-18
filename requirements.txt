@@ -6,3 +6,5 @@ simpleaudio
 numpy
 intervaltree
 openpyxl
+audioop-lts
+music21
