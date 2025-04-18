@@ -1,5 +1,5 @@
-import pitch
-import cq
+import utils.pitch as pitch
+import utils.cq as cq
 import openpyxl
 import numpy as np
 import pprint
