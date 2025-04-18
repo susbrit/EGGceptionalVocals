@@ -45,7 +45,7 @@ def find_pitch_bounds(pitches):
     pitch_mid = pitch.get_pitch(freq_mid)
     pitch_hi = pitch.get_pitch(freq_hi)
 
-    return pitch_lo, pitch_mid, pitch_hi
+    return ((pitch_lo,freq_lo), (pitch_mid,freq_mid), (pitch_hi,freq_hi))
 
 def map_data(pitches, cqs):
     pitch2i_dict = dict()
@@ -96,10 +96,12 @@ def proc_data_sets(data_sets):
     .csv file of CQ data. Each data set should represent a distinct recording
     of the same repertoire or warmup. 
 
-    A processed list of data sets results in two outputs. A tuple of p-axis
-    graph ticks and a dictionary mapping data sets, as keys, to a list of
-    2-D data points. Each data point is a tuple formatted as (p, c) where
-    'p' is a pitch value and 'c' is a CQ value.
+    A processed list of data sets results in two outputs. 
+    1)  A nested tuple of p-axis graph ticks formatted as 
+        ( (pitch_lo,freq_lo),  (pitch_mid, freq_mid), (pitch_hi, freq_hi) )
+    2)  A dictionary mapping data sets, as keys, to a list of 2-D data points.
+       Each data point is a tuple formatted as (p, c) where
+       'p' is a pitch value and 'c' is a CQ value.
     '''
     data_sets_proc = dict()
     pitches_all = []
@@ -116,8 +118,8 @@ def proc_data_sets(data_sets):
         pitches_all += pitches
 
     # process unioned pitches into p-axis graph ticks
-    p_lo, p_mid, p_hi = find_pitch_bounds(pitches_all)
-    p_ticks = (p_lo, p_mid, p_hi)
+    bounds = find_pitch_bounds(pitches_all)
+    p_ticks = bounds
     return p_ticks, data_sets_proc
 
 '''
