@@ -1,12 +1,31 @@
 import os
+import pprint
 from .context import proc_data
 
-def pitch_detection():
-    pitch_data = 'src/tests/data/pitch_data'
+def test_proc_data_sets():
+    pf = 'src/tests/data/pitch_data/Izzy C Major Scale Mic Only.xlsx'
+    cf1 = 'src/tests/data/cq_data/dummy_cq_1.csv'
+    cf2 = 'src/tests/data/cq_data/dummy_cq_2.csv'
+
+    # for sake of simplicity, reuse pf for all data sets
+    data_sets = [(pf, cf1), (pf, cf2)]
+
+    p_ticks, data_sets_proc = proc_data.proc_data_sets(data_sets)
+    print(p_ticks)
+    print(data_sets_proc)
+
+def test_backend():
+    pitch_data = 'src/tests/data/pitch_data/'
+    cf = 'src/tests/data/cq_data/dummy_cq_1.csv'
+
     for pitch_file_name in os.listdir(pitch_data):
-        pitch_file_path = os.path.join(pitch_data, pitch_file_name)
-        print(proc_data.find_pitch_bounds(["C4", "C5", "C6"]))
-        print(pitch_file_path)
+        pf = os.path.join(pitch_data, pitch_file_name)
+        print(pf)
+        
+        times, pitches, cqs = proc_data.proc_data(pf, cf)
+        
+        #test_map_data(pitches, cqs)
 
 # Run tests
-pitch_detection()
+#test_backend()
+test_proc_data_sets()

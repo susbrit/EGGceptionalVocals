@@ -12,6 +12,27 @@ pitch_file_path =  "data/Izzy C Major Scale Mic Only.xlsx"
 cq_file_path = "data/CQ Unknown Test - Sheet1.csv"
 '''
 
+def trim_data(times, pitches, cqs):
+    lens = [len(times), len(pitches), len(cqs)]
+    shortlen = min(lens)
+    times_res = times[:shortlen]
+    pitches_res = pitches[:shortlen]
+    cqs_res = cqs[:shortlen]
+    return times_res, pitches_res, cqs_res
+
+# Output processed time, pitch, and cq data
+def proc_data(pitch_file_path, cq_file_path):
+    freq_data = openpyxl.load_workbook(pitch_file_path)
+
+    times, pitches = pitch.proc_freq_data(freq_data, TIME_STEP)
+    cqs = cq.proc_cq_data(times, cq_file_path)
+    
+    if (len(times) != len(pitches)) | (len(times) != len(cqs)):
+        print('Warning: Mismatch of shapes for times and CQs')
+        times, pitches, cqs = trim_data(times, pitches, cqs)
+    
+    return times, pitches, cqs
+
 def find_pitch_bounds(pitches):
     freqs = []
     for p in pitches:
@@ -25,14 +46,6 @@ def find_pitch_bounds(pitches):
     pitch_hi = pitch.get_pitch(freq_hi)
 
     return pitch_lo, pitch_mid, pitch_hi
-
-def trim_data(times, pitches, cqs):
-    lens = [len(times), len(pitches), len(cqs)]
-    shortlen = min(lens)
-    times_res = times[:shortlen]
-    pitches_res = pitches[:shortlen]
-    cqs_res = cqs[:shortlen]
-    return times_res, pitches_res, cqs_res
 
 def map_data(pitches, cqs):
     pitch2i_dict = dict()
@@ -61,21 +74,51 @@ def map_data(pitches, cqs):
         cq = pitch2cq_dict[pitch]
         pitch2cq_map.append( (pitch, cq) )
 
-    pprint.pp(pitch2cq_map)
     return pitch2cq_map
 
-# Output processed time, pitch, and cq data
-def proc_data(pitch_file_path, cq_file_path):
-    freq_data = openpyxl.load_workbook(pitch_file_path)
+def proc_data_sets(data_sets):
+    '''
+    Parameters
+    __________
+    data_sets: List of data sets.
 
-    times, pitches = pitch.proc_freq_data(freq_data, TIME_STEP)
-    cqs = cq.proc_cq_data(times, cq_file_path)
-    
-    if (len(times) != len(pitches)) | (len(times) != len(cqs)):
-        print('Warning: Mismatch of shapes for times and CQs')
-        times, pitches, cqs = trim_data(times, pitches, cqs)
-    
-    return times, pitches, cqs
+    Returns
+    _______
+    p_ticks: Tuple of pitch bounds (lo, mid, hi)
+    data_sets_proc: Dictionary mapping data sets to data points
+
+    Description
+    ___________
+    Process a list of one or more sets of data. 
+
+    Each data set in the list should be a tuple formatted as (pf, cf) where
+    'pf' is a path to a .xlsx file of pitch data and 'cf' is a path to a
+    .csv file of CQ data. Each data set should represent a distinct recording
+    of the same repertoire or warmup. 
+
+    A processed list of data sets results in two outputs. A tuple of p-axis
+    graph ticks and a dictionary mapping data sets, as keys, to a list of
+    2-D data points. Each data point is a tuple formatted as (p, c) where
+    'p' is a pitch value and 'c' is a CQ value.
+    '''
+    data_sets_proc = dict()
+    pitches_all = []
+    # process each data set into a list of data points
+    for set in data_sets:
+        # process data set into a map
+        times, pitches, cqs = proc_data(set[0], set[1])
+        pitch2cq_map = map_data(pitches, cqs)
+        
+        # add map to dictionary
+        data_sets_proc[set] = pitch2cq_map
+
+        # collect all pitches from the data sets
+        pitches_all += pitches
+
+    # process unioned pitches into p-axis graph ticks
+    p_lo, p_mid, p_hi = find_pitch_bounds(pitches_all)
+    p_ticks = (p_lo, p_mid, p_hi)
+    return p_ticks, data_sets_proc
 
 '''
 # Quick run
