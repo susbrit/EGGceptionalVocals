@@ -7,11 +7,6 @@ import pprint
 # CONSTANTS
 TIME_STEP = 40
 
-'''
-pitch_file_path =  "data/Izzy C Major Scale Mic Only.xlsx"
-cq_file_path = "data/CQ Unknown Test - Sheet1.csv"
-'''
-
 def trim_data(times, pitches, cqs):
     lens = [len(times), len(pitches), len(cqs)]
     shortlen = min(lens)
@@ -19,19 +14,6 @@ def trim_data(times, pitches, cqs):
     pitches_res = pitches[:shortlen]
     cqs_res = cqs[:shortlen]
     return times_res, pitches_res, cqs_res
-
-# Output processed time, pitch, and cq data
-def proc_data(pitch_file_path, cq_file_path):
-    freq_data = openpyxl.load_workbook(pitch_file_path)
-
-    times, pitches = pitch.proc_freq_data(freq_data, TIME_STEP)
-    cqs = cq.proc_cq_data(times, cq_file_path)
-    
-    if (len(times) != len(pitches)) | (len(times) != len(cqs)):
-        print('Warning: Mismatch of shapes for times and CQs')
-        times, pitches, cqs = trim_data(times, pitches, cqs)
-    
-    return times, pitches, cqs
 
 def find_pitch_bounds(pitches):
     freqs = []
@@ -76,6 +58,44 @@ def map_data(pitches, cqs):
 
     return pitch2cq_map
 
+# Output processed time, pitch, and cq data
+def proc_data(pitch_file_path, cq_file_path):
+    '''
+    Parameters
+    __________
+    pitch_file_path: String path to a .xlsx file of pitch data
+    cq_file_path: String path to a .csv file of CQ data
+
+    Returns
+    _______
+    p_ticks: Tuple of pitch bounds (lo, mid, hi)
+    data_proc: Array of data points
+
+    Description
+    ___________
+    Process a data set of frequency and CQ measurements.
+
+    A processed data set results in two outputs.
+    1)  A nested tuple of p-axis graph ticks formatted as 
+        ( (pitch_lo,freq_lo),  (pitch_mid, freq_mid), (pitch_hi, freq_hi) )
+    2) An array of floats representing timestamps to base ptich and CQ values on.
+    3) An array of floats representing CQ values.
+    4) An array of strings representing pitch values.
+    '''
+    freq_data = openpyxl.load_workbook(pitch_file_path)
+
+    times, pitches = pitch.proc_freq_data(freq_data, TIME_STEP)
+    cqs = cq.proc_cq_data(times, cq_file_path)
+    
+    if (len(times) != len(pitches)) | (len(times) != len(cqs)):
+        print('Warning: Mismatch of shapes for times and CQs')
+        times, pitches, cqs = trim_data(times, pitches, cqs)
+
+    # process pitches into p-axis graph ticks
+    p_ticks = find_pitch_bounds(pitches)
+    
+    return p_ticks, times, pitches, cqs
+
 def proc_data_sets(data_sets):
     '''
     Parameters
@@ -108,7 +128,7 @@ def proc_data_sets(data_sets):
     # process each data set into a list of data points
     for set in data_sets:
         # process data set into a map
-        times, pitches, cqs = proc_data(set[0], set[1])
+        p_ticks, times, pitches, cqs = proc_data(set[0], set[1])
         pitch2cq_map = map_data(pitches, cqs)
         
         # add map to dictionary
@@ -118,13 +138,5 @@ def proc_data_sets(data_sets):
         pitches_all += pitches
 
     # process unioned pitches into p-axis graph ticks
-    bounds = find_pitch_bounds(pitches_all)
-    p_ticks = bounds
+    p_ticks = find_pitch_bounds(pitches_all)
     return p_ticks, data_sets_proc
-
-'''
-# Quick run
-times, pitches, cqs = proc_data(pitch_file_path, cq_file_path)
-map_data(pitches, cqs)
-print(find_pitch_bounds(pitches))
-'''
