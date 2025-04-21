@@ -68,7 +68,7 @@ def test_backend():
         #test_map_data(pitches, cqs)
 
 # Run tests
-#test_proc_pitch()
+test_proc_pitch()
 #test_proc_data()
-test_proc_data_sets()
+#test_proc_data_sets()
 #test_backend()
