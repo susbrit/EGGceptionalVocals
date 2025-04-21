@@ -69,13 +69,15 @@ def proc_data(pitch_file_path, cq_file_path):
     Returns
     _______
     p_ticks: Tuple of pitch bounds (lo, mid, hi)
-    data_proc: Array of data points
+    times: Array of timestamps
+    pitches: Array of pitch note values
+    cqs: Array of CQ weighted average values
 
     Description
     ___________
     Process a data set of frequency and CQ measurements.
 
-    A processed data set results in two outputs.
+    A processed data set results in four outputs.
     1)  A nested tuple of p-axis graph ticks formatted as 
         ( (pitch_lo,freq_lo),  (pitch_mid, freq_mid), (pitch_hi, freq_hi) )
     2) An array of floats representing timestamps to base ptich and CQ values on.
