@@ -4,8 +4,39 @@ import openpyxl
 import numpy as np
 import pprint
 
+###############################################################################
 # CONSTANTS
+###############################################################################
+
 TIME_STEP = 40
+
+'''
+Ideal CQ Range for Female
+______________
+Expected to increase with pitch.
+Key: (Pitch, Frequency)
+Value: (CQ LO, CQ HI)
+'''
+idealCQfemale = {
+        ('G3',  196.0): (24.0, 26.0),
+        ('B3',  247.0): (27.0, 28.0),
+        ('D#4', 311.0): (30.0, 31.0),
+        ('G4',  392.0): (33.0, 35.0),
+        ('B4',  494.0): (37.0, 38.0),
+        ('D#5', 622.0): (38.0, 41.0)
+        }
+
+'''
+Ideal CQ Range for Male
+_______________________
+Expected to be relatively constant regardless of pitch.
+(CQ LO, CQ HI)
+'''
+idealCQmale = (34, 54)
+
+###############################################################################
+# FUNCTIONS
+###############################################################################
 
 def trim_data(times, pitches, cqs):
     lens = [len(times), len(pitches), len(cqs)]
