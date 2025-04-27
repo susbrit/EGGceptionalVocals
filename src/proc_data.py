@@ -38,6 +38,22 @@ idealCQmale = (34, 54)
 # FUNCTIONS
 ###############################################################################
 
+'''
+Parameters
+__________
+x_pos: Mouse cursor position representing a frequency value
+
+Returns
+_______
+pitch: String representing the pitch note
+
+Description
+___________
+Get the pitch note label corresponding to the mouse cursor position. 
+'''
+def get_pitch_label(x_pos):
+    return pitch.get_pitch(x_pos)
+
 def trim_data(times, pitches, cqs):
     lens = [len(times), len(pitches), len(cqs)]
     shortlen = min(lens)
