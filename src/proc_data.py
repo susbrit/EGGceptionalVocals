@@ -2,7 +2,6 @@ import utils.pitch as pitch
 import utils.cq as cq
 import openpyxl
 import numpy as np
-import pprint
 
 ###############################################################################
 # CONSTANTS
@@ -14,17 +13,20 @@ TIME_STEP = 40
 Ideal CQ Range for Female
 ______________
 Expected to increase with pitch.
-Key: (Pitch, Frequency)
-Value: (CQ LO, CQ HI)
+Includes three lists to represent frequencies, LO CQ values, and HI CQ values.
 '''
-idealCQfemale = {
-        ('G3',  196.0): (24.0, 26.0),
-        ('B3',  247.0): (27.0, 28.0),
-        ('D#4', 311.0): (30.0, 31.0),
-        ('G4',  392.0): (33.0, 35.0),
-        ('B4',  494.0): (37.0, 38.0),
-        ('D#5', 622.0): (38.0, 41.0)
-        }
+idealCQfemalefreqs = [
+        # G3,   B3,   D#4,    G4,    B4,    D#5
+        196.0, 246.9, 311.1, 392.0, 493.8, 622.2
+        ]
+
+idealCQfemaleLO = [
+        24.0, 27.0, 30.0, 33.0, 37.0, 38.0
+        ]
+
+idealCQfemaleHI = [
+        26.0, 28.0, 31.0, 35.0, 38.0, 41.0
+        ]
 
 '''
 Ideal CQ Range for Male
@@ -93,11 +95,11 @@ def map_data(pitches, cqs):
 # FUNCTIONS
 ###############################################################################
 
-def get_pitch_label(x_pos):
+def get_pitch_label(freq):
     '''
     Parameters
     __________
-    x_pos: Mouse cursor position representing a frequency value
+    freq: Mouse cursor position representing a frequency value
 
     Returns
     _______
@@ -107,7 +109,7 @@ def get_pitch_label(x_pos):
     ___________
     Get the pitch note label corresponding to the mouse cursor position. 
     '''
-    return pitch.get_pitch(x_pos)
+    return pitch.get_pitch(freq)
 
 def proc_data(pitch_file_path, cq_file_path):
     '''
