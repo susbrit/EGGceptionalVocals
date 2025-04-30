@@ -615,6 +615,8 @@ class AudioPlayer:
 
 class AnalysisWindow:
   ideal_display_ids = []
+  yellow_plot = None
+  female_cq_x_vals = []
   def __init__(self):
     global db
     global loaded_recording_id
@@ -634,8 +636,6 @@ class AnalysisWindow:
       recording_details['pitch_file_path'],
       recording_details['cq_file_path']
     )]
-
-    print(freq_cq_list)
 
     # arbitrary value for width of plot
     plot_width = 100
@@ -665,6 +665,23 @@ class AnalysisWindow:
     for pair in freq_cq_list:
       x_vals.append(pitch_x_val_dict[proc_data.get_pitch_label(pair[0])])
       y_vals.append(pair[1])
+
+    # calculate x values for idealized female overlay
+
+    # TODO putting it here for now but this should end up going in proc_data
+    idealCQfemalefreqs = [
+      "G3", "B3", "D#4", "G4", "B4", "D#5"
+    ]
+
+    for freq in idealCQfemalefreqs:
+      if freq in pitch_x_val_dict:
+        self.female_cq_x_vals.append(pitch_x_val_dict[freq])
+
+    # yellow styling for highlight graphs
+    with dpg.theme() as self.yellow_plot:
+        with dpg.theme_component():
+            dpg.add_theme_color(dpg.mvPlotCol_Line, (255, 255, 0, 255), category=dpg.mvThemeCat_Plots)
+            dpg.add_theme_color(dpg.mvPlotCol_Fill, (255, 255, 0, 50), category=dpg.mvThemeCat_Plots)
 
     with dpg.child_window(tag="Analysis Window", parent="Primary Window"):
       dpg.add_text("View CQ data corresponding to sung pitches.")
@@ -696,19 +713,45 @@ class AnalysisWindow:
   def display_ideal_male_cq(self):
     max_cq = proc_data.idealCQmale[1]/100
     min_cq = proc_data.idealCQmale[0]/100
-    dpg.add_line_series([0, 100], [max_cq, max_cq], label="max ideal male", parent="analysis_y_axis", tag="max_male")
+
+    dpg.add_line_series([0, 100], [max_cq, max_cq], label="max ideal male", parent="analysis_y_axis")
     self.ideal_display_ids.append(dpg.last_item())
-    dpg.add_line_series([0, 100], [min_cq, min_cq], label="min ideal male", parent="analysis_y_axis", tag="min_male")
+    dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
+
+    dpg.add_line_series([0, 100], [min_cq, min_cq], label="min ideal male", parent="analysis_y_axis")
     self.ideal_display_ids.append(dpg.last_item())
-    dpg.add_shade_series([0, 100], [min_cq, min_cq], y2=[max_cq, max_cq], parent="analysis_y_axis", tag="male_cq_shade")
+    dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
+
+    dpg.add_shade_series([0, 100], [min_cq, min_cq], y2=[max_cq, max_cq], parent="analysis_y_axis")
     self.ideal_display_ids.append(dpg.last_item())
+    dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
 
   def display_ideal_female_cq(self):
-    pass
+    print("displaying!")
+    max_cqs = [x / 100 for x in proc_data.idealCQfemaleHI]
+    min_cqs = [x / 100 for x in proc_data.idealCQfemaleLO]
+    
+    x_vals = self.female_cq_x_vals
+
+    dpg.add_line_series(x_vals, max_cqs, label="max ideal female", parent="analysis_y_axis")
+    self.ideal_display_ids.append(dpg.last_item())
+    dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
+
+    dpg.add_line_series(x_vals, min_cqs, label="min ideal female", parent="analysis_y_axis")
+    self.ideal_display_ids.append(dpg.last_item())
+    dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
+
+    dpg.add_shade_series(x_vals, min_cqs, y2=max_cqs, parent="analysis_y_axis")
+    self.ideal_display_ids.append(dpg.last_item())
+    dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
+
 
   def clear_ideal_displays(self):
+    if self.ideal_display_ids == None or len(self.ideal_display_ids) == 0:
+      return
     for item in self.ideal_display_ids:
       dpg.delete_item(item)
+    self.ideal_display_ids.clear()
 
   def get_window_id(self):
     return "ANALYSIS_WINDOW"
