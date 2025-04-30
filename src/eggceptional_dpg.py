@@ -384,18 +384,15 @@ class AudioPlayer:
     # set label for song
     dpg.set_value("selected_file_name", f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
 
-    # number of plots per row depends on how many input files are defined
-    self.plots_per_row = 0 
+    # number of plots per row depends on how many input files are defined, but is hardcoded for now
+    # TODO error checking
+    self.plots_per_row = 3 
 
-    # total duration is determined by one file's length 
-    # (currently, priority is audio > CQ > pitch)
-    # as a result, this only works if each file is approximately the same length
+    #TODO duration is set by audio, which assumes proper trimming w other files
     duration = 0
 
     # set up audio file
     if recording_details['audio_file_path'] != None:
-      self.plots_per_row = self.plots_per_row + 1
-
       self.loaded_audio["file_path_name"] = recording_details['audio_file_path']
       self.loaded_audio["is_playing"] = False
       self.loaded_audio["current_time_index"] = 0
@@ -419,34 +416,22 @@ class AudioPlayer:
 
 
       # process input pitch and CQ spreadsheet
-      # TODO: Graph these values
-      times, pitches, cqs = proc_data.proc_data(
+      p_ticks, times, pitches, cqs = proc_data.proc_data(
         recording_details['pitch_file_path'],
         recording_details['cq_file_path']
       )
 
+      times_array = np.array(times)
+      cqs_array = np.array(cqs)
+      pitches_array = np.array(pitches)
+
+      #calculate graph bounds for pitch-- a little outside of lowest/highest values
+      min_pitch_bound = .9 * p_ticks[0][1]
+      max_pitch_bound = 1.1 * p_ticks[2][1]
+
       # process input CQ spreadsheet
     else:
       self.loaded_audio = None
-    
-    # TODO modify these if-blocks with Melina's file processing
-    # process input CQ spreadsheet
-    if recording_details['cq_file_path'] != None:
-      self.plots_per_row = self.plots_per_row + 1
-      cq_file = pd.read_excel(recording_details['cq_file_path'])
-      cq_time = np.array(cq_file.iloc[:, 0].tolist())
-      cq_values = np.array(cq_file.iloc[:, 1].tolist())
-      if duration == 0:
-        duration = cq_time[len(cq_time) - 1]
-
-    # process input pitch spreadsheet
-    if recording_details['pitch_file_path'] != None:
-      self.plots_per_row = self.plots_per_row + 1
-      pitch_file = pd.read_excel(recording_details['pitch_file_path'])
-      pitch_time = np.array(pitch_file.iloc[:, 0].tolist())
-      pitch_values = np.array(pitch_file.iloc[:, 1].tolist())
-      if duration == 0:
-        duration = pitch_time[len(pitch_time) - 1]
 
     if pygame.mixer.music.get_busy():
       pygame.mixer.music.stop()
@@ -469,19 +454,14 @@ class AudioPlayer:
           break
       
       # Generate time values for the CQ and pitch values
-      if recording_details['cq_file_path'] != None:
-        cq_time_mask = (cq_time >= min_time) & (cq_time <= max_time)
-        cq_time_chunk = cq_time[cq_time_mask]
-        cq_value_chunk = cq_values[cq_time_mask]
-
-      if recording_details['pitch_file_path'] != None:
-        pitch_time_mask = (pitch_time >= min_time) & (pitch_time <= max_time)
-        pitch_time_chunk = pitch_time[pitch_time_mask]
-        pitch_value_chunk = pitch_values[pitch_time_mask]
+      time_mask = (times_array >= min_time) & (times_array <= max_time)
+      time_chunk = times_array[time_mask]
+      cq_value_chunk = cqs_array[time_mask]
+      pitch_value_chunk = pitches_array[time_mask]
 
       # Generate X values for audio data (time axis)
       if recording_details['audio_file_path'] != None:
-        time = np.linspace(min_time, max_time, num=(max_time-min_time)*audio.frame_rate)
+        audio_time = np.linspace(min_time, max_time, num=(max_time-min_time)*audio.frame_rate)
         chunk_samples_audio = samples[min_time*audio.frame_rate:max_time*audio.frame_rate]
 
       # container for this line
@@ -496,7 +476,7 @@ class AudioPlayer:
                 y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Closed Quotient", tag=f"y_axis_{i}_{str(plot_num)}")
                 dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.00", 1)))
                 #dpg.add_line_series(time, .5*np.sin(5*time), label="Arbitrary Data", parent=y_axis)
-                dpg.add_line_series(cq_time_chunk, cq_value_chunk, label="Closed Quotient", parent=y_axis)
+                dpg.add_line_series(time_chunk, cq_value_chunk, label="Closed Quotient", parent=y_axis)
                 # fix time and amplitude so that the user can't scroll around
                 dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
                 dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", 0, 1)
@@ -507,13 +487,14 @@ class AudioPlayer:
               with dpg.plot(tag=f"waveform_{i}_{str(plot_num)}", height=260, width=-1):
                 x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_{str(plot_num)}")
                 y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Pitch Frequency (Hz)", tag=f"y_axis_{i}_{str(plot_num)}")
-                # TODO use backend update to make this dynamic
-                dpg.set_axis_ticks(dpg.last_item(), ((" G3 ", 196), (" G4 ", 392)))
-                dpg.add_line_series(pitch_time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
+                dpg.set_axis_ticks(dpg.last_item(), p_ticks)
+                #dpg.add_line_series(time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
+                #TODO current backend is sending note names rather than frequencies to graph
+                dpg.add_line_series(time_chunk, cq_value_chunk, label="Pitch Frequency", parent=y_axis)
                 # fix time and amplitude so that the user can't scroll around
                 dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
                 # TODO this limit is hard coded right now
-                dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", 100, 500)
+                dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", min_pitch_bound, max_pitch_bound)
                 plot_num = plot_num + 1
 
             # plot the audio waveform
@@ -521,11 +502,10 @@ class AudioPlayer:
               with dpg.plot(tag=f"waveform_{i}_{str(plot_num)}", height=200, width=-1):
                 x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=f"x_axis_{i}_{str(plot_num)}")
                 y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Audio Signal", tag=f"y_axis_{i}_{str(plot_num)}")
-                dpg.add_line_series(time, chunk_samples_audio, label="Audio Signal", parent=y_axis)
+                dpg.add_line_series(audio_time, chunk_samples_audio, label="Audio Signal", parent=y_axis)
                 # fix time and amplitude so that the user can't scroll around
                 dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
                 dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", -1, 1)
-
       else:
         print("Error: Table 'plot_display_table' not found")
         return
@@ -637,8 +617,10 @@ class AddRecordingWindow:
 
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_audio, id="audio_file_dialog", width=700 ,height=400):
             dpg.add_file_extension("Source files (*.mp3 *.wav){.mp3,.wav}", color=(0, 255, 255, 255))
+      # CQ must be a .csv file
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_cq, id="cq_file_dialog", width=700 ,height=400):
-            dpg.add_file_extension("Source files (*.xlsx){.xlsx}", color=(0, 255, 255, 255))
+            dpg.add_file_extension("Source files (*.csv){.csv}", color=(0, 255, 255, 255))
+      # pitch must be a .xlsx file
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_pitch, id="pitch_file_dialog", width=700 ,height=400):
             dpg.add_file_extension("Source files (*.xlsx){.xlsx}", color=(0, 255, 255, 255))
 
@@ -719,8 +701,8 @@ class AddRecordingWindow:
 
     # error finding matching id
     if song_id == -1:
-      print("ERROR: could not determine song_id for selection")
-      return
+      print("ERROR: could not determine song_id for selection, picking default")
+      song_id = 0
     
     recording_title = dpg.get_value("title_input")
     if recording_title == None:
