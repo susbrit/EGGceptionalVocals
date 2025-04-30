@@ -587,6 +587,7 @@ class AnalysisWindow:
   ideal_display_ids = []
   yellow_plot = None
   female_cq_x_vals = []
+  pitch_x_val_dict = {}
   def __init__(self):
     global db
     global loaded_recording_id
@@ -620,20 +621,24 @@ class AnalysisWindow:
     interval_size = plot_width / (len(pitches_included) + 2)
     cur_interval = interval_size
     cq_ticks = ()
-    pitch_x_val_dict = {}
 
     for pitch in pitches_included:
       new_element = (pitch, cur_interval)
       cq_ticks = cq_ticks + (new_element,)
-      pitch_x_val_dict.update({pitch:cur_interval})
       cur_interval = cur_interval + interval_size
+
+    # map all pitches to their corresponding x values on this graph
+    # we use this to accurately plot the idealized overlays
+    for pitch in PITCH_NAMES:
+      pitch_x = interval_size * (PITCH_NAMES.index(pitch) - start) + interval_size
+      self.pitch_x_val_dict.update({pitch:pitch_x})
 
     # generate values for scatter plot
     x_vals = []
     y_vals = []
     # reformat x values based on where pitches were plotted
     for pair in freq_cq_list:
-      x_vals.append(pitch_x_val_dict[proc_data.get_pitch_label(pair[0])])
+      x_vals.append(self.pitch_x_val_dict[proc_data.get_pitch_label(pair[0])])
       y_vals.append(pair[1])
 
     # calculate x values for idealized female overlay
@@ -644,8 +649,8 @@ class AnalysisWindow:
     ]
 
     for freq in idealCQfemalefreqs:
-      if freq in pitch_x_val_dict:
-        self.female_cq_x_vals.append(pitch_x_val_dict[freq])
+      if freq in self.pitch_x_val_dict:
+        self.female_cq_x_vals.append(self.pitch_x_val_dict[freq])
 
     # yellow styling for highlight graphs
     with dpg.theme() as self.yellow_plot:
@@ -697,7 +702,6 @@ class AnalysisWindow:
     dpg.bind_item_theme(dpg.last_item(), self.yellow_plot)
 
   def display_ideal_female_cq(self):
-    print("displaying!")
     max_cqs = [x / 100 for x in proc_data.idealCQfemaleHI]
     min_cqs = [x / 100 for x in proc_data.idealCQfemaleLO]
     
