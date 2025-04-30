@@ -918,7 +918,21 @@ class WelcomeScreen:
 class TutorialWindow:
   def __init__(self):
     with dpg.child_window(tag="Tutorial Window", parent="Primary Window"):
-      dpg.add_text("Insert your tutorial here")
+      dpg.add_text("To get started, you want to make sure that the EGG is turned on and charged\nYou can do so by clicking bat test at the front of the EGG")
+      dpg.add_text("To turn on the EGG, turn the battery knob to B. If B is out of power, switch to A")
+      dpg.add_text("To ensure that the EGG is calibrated, plug in the larynx simulator to the electrodes port\n" \
+      "Then, start a test recording in VoceVista, pressing the larynx simulator button to see if VoceVista can read a CQ data\n" \
+      "Ensure that there is a consistent white line at the top left of VoceVista for (EGG Cycle Time) at around 0.53 while pressing on the larynx simulator\n" \
+      "If there isn't, report the problem to manufacturer as something is broken with the EGG")
+      dpg.add_text("After calibration, unplug the larynx simulator and plug in the electrodes \n" \
+      "Next, for longer haired individuals, tie hair up so tape does not stick to hair\n" \
+      "Use an alcohol wipe to sanitize hands, neck area, and electrodes \n" \
+      "Apply a thin layer of electrode gel to the electrodes")
+      dpg.add_text("Put electrodes on larynx. To identify proper placement, start a recording in VoceVista and make a constant noise \n" \
+      "Just like in the larynx simulator, move electrodes until you see a consistent white line at the top left of VoceVista \n" \
+      "Once a clear closed quotient is found, tape electrodes in place \n" \
+      "If signal cannot be found, make sure that EGG Output level switch on the front is set to High \n" \
+      "Now, you are ready to record! Make sure to press record on both VoceVista and Voice Memos at the same time")
 
   def get_window_id(self):
     return "TUTORIAL_WINDOW"
