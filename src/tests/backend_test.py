@@ -5,6 +5,15 @@ import pprint
 #from .context import proc_data
 #from .context import utils
 from .context import *
+
+def test_time2stamp():
+    pf = 'src/tests/data/pitch_data/Izzy C Major Scale Mic Only.xlsx'
+    cf = 'src/tests/data/cq_data/dummy_cq_1.csv'
+    p_ticks, times, cqs, pitches, freqs = proc_data.proc_data(pf, cf)
+
+    for time in times:
+        print('time: ', time)
+
 def test_proc_pitch():
     total_count = 0
     pfs = []
@@ -12,6 +21,9 @@ def test_proc_pitch():
     pfs.append('src/tests/data/pitch_data/Amit C Major.xlsx')
     pfs.append('src/tests/data/pitch_data/Teresa G Major Scale.xlsx')
     pfs.append('src/tests/data/pitch_data/Shawn A Major Scale.xlsx')
+    pfs.append('src/tests/data/pitch_data/Happy Birthday Straight Toned.xlsx')
+    pfs.append('src/tests/data/pitch_data/Amit Happy Birthday F.xlsx')
+    pfs.append('src/tests/data/pitch_data/Susanna Happy Birthday.xlsx')
 
     for pf in pfs:
         print(pf)
@@ -26,7 +38,7 @@ def test_proc_pitch():
 def test_proc_data(): 
     pf = 'src/tests/data/pitch_data/Izzy C Major Scale Mic Only.xlsx'
     cf = 'src/tests/data/cq_data/dummy_cq_1.csv'
-    p_ticks, times, pitches, cqs = proc_data.proc_data(pf, cf)
+    p_ticks, times, cqs, pitches, freqs = proc_data.proc_data(pf, cf)
 
     print('p-axis ticks:')
     print(p_ticks)
@@ -63,12 +75,13 @@ def test_backend():
         pf = os.path.join(pitch_data, pitch_file_name)
         print(pf)
         
-        p_ticks, times, pitches, cqs = proc_data.proc_data(pf, cf)
+        p_ticks, times, cqs, pitches, freqs = proc_data.proc_data(pf, cf)
         
         #test_map_data(pitches, cqs)
 
 # Run tests
-test_proc_pitch()
-#test_proc_data()
-#test_proc_data_sets()
+#test_time2stamp()
+#test_proc_pitch()
+test_proc_data()
+test_proc_data_sets()
 #test_backend()
