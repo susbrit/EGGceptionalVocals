@@ -16,8 +16,7 @@ Expected to increase with pitch.
 Includes three lists to represent frequencies, LO CQ values, and HI CQ values.
 '''
 idealCQfemalefreqs = [
-        # G3,   B3,   D#4,    G4,    B4,    D#5
-        196.0, 246.9, 311.1, 392.0, 493.8, 622.2
+         'G3',   'B3',   'D#4',    'G4',    'B4',  'D#5'
         ]
 
 idealCQfemaleLO = [
