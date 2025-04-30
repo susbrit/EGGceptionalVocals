@@ -642,11 +642,7 @@ class AnalysisWindow:
       y_vals.append(pair[1])
 
     # calculate x values for idealized female overlay
-
-    # TODO putting it here for now but this should end up going in proc_data
-    idealCQfemalefreqs = [
-      "G3", "B3", "D#4", "G4", "B4", "D#5"
-    ]
+    idealCQfemalefreqs = proc_data.idealCQfemalefreqs
 
     for freq in idealCQfemalefreqs:
       if freq in self.pitch_x_val_dict:
