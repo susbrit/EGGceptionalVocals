@@ -27,6 +27,23 @@ PITCH_NAMES = [
     'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6', 'F#6', 'G6', 'G#6', 'A6', 'A#6', 'B6'
 ]
 
+# Dictionary of pitches mapped to frequency
+PITCH_DICT = {
+    #Octave 2               3               4               5               6
+    "C2":  65.4,    "C3":  130.8,   "C4":  261.6,   "C5":   523.2,   "C6":  1046.5,
+    "C#2": 69.3,    "C#3": 138.5,   "C#4": 277.1,   "C#5":  554.3,   "C#6":  1108.7,
+    "D2":  73.4,    "D3":  146.8,   "D4":  293.6,   "D5":   587.3,   "D6":  1174.6,
+    "D#2": 77.7,    "D#3": 155.56,  "D#4": 311.1,   "D#5":  622.2,   "D#6":  1244.5,
+    "E2":  82.4,    "E3":  164.8,   "E4":  329.6,   "E5":   659.2,   "E6":  1318.5,
+    "F2":  87.3,    "F3":  174.6,   "F4":  349.2,   "F5":   698.4,   "F6":  1396.9,
+    "F#2": 92.5,    "F#3": 185.0,   "F#4": 369.9,   "F#5":  739.9,   "F#6":  1479.9,
+    "G2":  98.0,    "G3":  196.0,   "G4":  392.0,   "G5":   783.9,   "G6":  1567.9,
+    "G#2": 103.8,   "G#3": 207.6,   "G#4": 415.3,   "G#5":  830.6,   "G#6":  1661.2,
+    "A2":  110.0,   "A3":  220.0,   "A4":  440.0,   "A5":   880.0,   "A6":  1760.0,
+    "A#2": 116.5,   "A#3": 233.0,   "A#4": 466.1,   "A#5":  932.3,   "A#6":  1864.6,
+    "B2":  123.4,   "B3":  246.9,   "B4":  493.8,   "B5":   987.7,   "B6":  1975.5
+}
+
 # TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
 loaded_cq_file = None
 loaded_audio_file = None
@@ -427,10 +444,12 @@ class AudioPlayer:
 
 
       # process input pitch and CQ spreadsheet
-      p_ticks, times, pitches, cqs = proc_data.proc_data(
+      p_ticks, times, cqs, note_names, pitches = proc_data.proc_data(
         recording_details['pitch_file_path'],
         recording_details['cq_file_path']
       )
+
+      print(pitches)
 
       times_array = np.array(times)
       cqs_array = np.array(cqs)
@@ -501,7 +520,7 @@ class AudioPlayer:
                 dpg.set_axis_ticks(dpg.last_item(), p_ticks)
                 #dpg.add_line_series(time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
                 #TODO current backend is sending note names rather than frequencies to graph
-                dpg.add_line_series(time_chunk, cq_value_chunk, label="Pitch Frequency", parent=y_axis)
+                dpg.add_line_series(time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
                 # fix time and amplitude so that the user can't scroll around
                 dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
                 # TODO this limit is hard coded right now
@@ -610,12 +629,12 @@ class AnalysisWindow:
       recording_details['cq_file_path']
     )])
 
-    print(p_ticks)
-    print(data_sets_proc)
-    print(data_sets_proc[(
+    freq_cq_list = data_sets_proc[(
       recording_details['pitch_file_path'],
       recording_details['cq_file_path']
-    )])
+    )]
+
+    print(freq_cq_list)
 
     # arbitrary value for width of plot
     plot_width = 100
@@ -625,23 +644,31 @@ class AnalysisWindow:
     start = PITCH_NAMES.index(p_ticks[0][0])
     end = PITCH_NAMES.index(p_ticks[2][0])
     pitches_included = PITCH_NAMES[start:end+1]
-    print(pitches_included)
+
     # one slot for each pitch, plus one extra on either end
     interval_size = plot_width / (len(pitches_included) + 2)
     cur_interval = interval_size
     cq_ticks = ()
+    pitch_x_val_dict = {}
 
     for pitch in pitches_included:
       new_element = (pitch, cur_interval)
       cq_ticks = cq_ticks + (new_element,)
+      pitch_x_val_dict.update({pitch:cur_interval})
       cur_interval = cur_interval + interval_size
 
-    print(cq_ticks)
+    # generate values for scatter plot
+    x_vals = []
+    y_vals = []
+    # reformat x values based on where pitches were plotted
+    for pair in freq_cq_list:
+      x_vals.append(pitch_x_val_dict[proc_data.get_pitch_label(pair[0])])
+      y_vals.append(pair[1])
 
     with dpg.child_window(tag="Analysis Window", parent="Primary Window"):
       dpg.add_text("View CQ data corresponding to sung pitches.")
       dpg.add_text(f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
-      with dpg.plot(tag="analysis_plot", height=260, width=500):
+      with dpg.plot(tag="analysis_plot", height=260, width=800):
         # x axis
         dpg.add_plot_axis(dpg.mvXAxis, label="Sung Pitch", tag="analysis_x_axis")
         dpg.set_axis_ticks(dpg.last_item(), cq_ticks)
@@ -652,7 +679,16 @@ class AnalysisWindow:
         dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.0", 1)))
         dpg.set_axis_limits(dpg.last_item(), 0, 1)
 
-        # data points
+        dpg.add_scatter_series(x_vals, y_vals, parent=dpg.last_item(), label="Pitch vs CQ")
+
+  def display_ideal_male_cq(self):
+    pass
+
+  def display_ideal_female_cq(self):
+    pass
+
+  def clear_ideal_displays(self):
+    pass
 
   def get_window_id(self):
     return "ANALYSIS_WINDOW"
