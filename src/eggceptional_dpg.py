@@ -27,29 +27,6 @@ PITCH_NAMES = [
     'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6', 'F#6', 'G6', 'G#6', 'A6', 'A#6', 'B6'
 ]
 
-# Dictionary of pitches mapped to frequency
-PITCH_DICT = {
-    #Octave 2               3               4               5               6
-    "C2":  65.4,    "C3":  130.8,   "C4":  261.6,   "C5":   523.2,   "C6":  1046.5,
-    "C#2": 69.3,    "C#3": 138.5,   "C#4": 277.1,   "C#5":  554.3,   "C#6":  1108.7,
-    "D2":  73.4,    "D3":  146.8,   "D4":  293.6,   "D5":   587.3,   "D6":  1174.6,
-    "D#2": 77.7,    "D#3": 155.56,  "D#4": 311.1,   "D#5":  622.2,   "D#6":  1244.5,
-    "E2":  82.4,    "E3":  164.8,   "E4":  329.6,   "E5":   659.2,   "E6":  1318.5,
-    "F2":  87.3,    "F3":  174.6,   "F4":  349.2,   "F5":   698.4,   "F6":  1396.9,
-    "F#2": 92.5,    "F#3": 185.0,   "F#4": 369.9,   "F#5":  739.9,   "F#6":  1479.9,
-    "G2":  98.0,    "G3":  196.0,   "G4":  392.0,   "G5":   783.9,   "G6":  1567.9,
-    "G#2": 103.8,   "G#3": 207.6,   "G#4": 415.3,   "G#5":  830.6,   "G#6":  1661.2,
-    "A2":  110.0,   "A3":  220.0,   "A4":  440.0,   "A5":   880.0,   "A6":  1760.0,
-    "A#2": 116.5,   "A#3": 233.0,   "A#4": 466.1,   "A#5":  932.3,   "A#6":  1864.6,
-    "B2":  123.4,   "B3":  246.9,   "B4":  493.8,   "B5":   987.7,   "B6":  1975.5
-}
-
-# TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
-loaded_cq_file = None
-loaded_audio_file = None
-loaded_pitch_file = None
-loaded_file_name = ""
-
 # switch from open_window to window "switching_to"
 # where "switching_to" is a string from global array defined_windows
 def switch_window(switching_to):
@@ -243,9 +220,6 @@ class AudioPlayer:
   #number of plots per table row
   plots_per_row = 0
 
-  #2d array of plots in the table
-  #table_plots = []
-
   #array of ids of plot cursors to update
   plot_cursors = []
   #array of ids of hovering cursors
@@ -281,10 +255,6 @@ class AudioPlayer:
 
   def get_window_id(self):
     return "PLAYBACK_WINDOW"
-
-  # TEMP FUNCTION
-  def back_to_menu(self):
-    switch_window("WELCOME_WINDOW")
 
   def hide(self):
     pygame.mixer.quit()
@@ -349,7 +319,7 @@ class AudioPlayer:
       # if not, delete all cursors and create new ones in the next row
       if dpg.get_item_parent(self.plot_cursors[0]) != dpg.get_alias_id(correct_cursor_parent):
         self.create_cursor_set(row_number)
-        dpg.set_y_scroll("waveform_plot", dpg.get_y_scroll("waveform_plot")+950) #TEMP hardcoded for demo
+        dpg.set_y_scroll("waveform_plot", dpg.get_y_scroll("waveform_plot")+950)
       # update position of all cursors
       for cursor_id in self.plot_cursors:
         dpg.set_value(cursor_id, [[pos]])
@@ -847,10 +817,6 @@ class AddRecordingWindow:
     dpg.set_value("audio_file_name", f"\n\n{file_name}")
 
   def submit_data(self):
-    # global loaded_cq_file
-    # global loaded_pitch_file
-    # global loaded_audio_file
-    # global loaded_file_name
     global loaded_recording_id
     global db
 
@@ -859,11 +825,6 @@ class AddRecordingWindow:
     if (self.selected_audio_file == None and self.selected_cq_file == None and self.selected_pitch_file == None):
       print(f"Couldn't open playback page without file input (received: {self.selected_audio_file} {self.selected_cq_file} {self.selected_pitch_file} {self.selected_song}")
       return
-    
-    # loaded_cq_file = self.selected_cq_file
-    # loaded_pitch_file = self.selected_pitch_file
-    # loaded_audio_file = self.selected_audio_file
-    # loaded_file_name = dpg.get_value("title_input")
 
     #TODO make this more smooth if possible - currently, use sequencing of song name list to determine song_id
     song_id = -1
