@@ -10,13 +10,15 @@ import sqlite3
 import proc_data
 
 open_window = None
-defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW"]
+defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW", "ANALYSIS_WINDOW"]
 
 #sqlite database
 db = None
 
 # id of recording currently loaded
 loaded_recording_id = -1
+
+# array of all pitches
 
 # TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
 loaded_cq_file = None
@@ -65,6 +67,8 @@ def switch_window(switching_to):
     new_window = AddRecordingWindow()
   elif switching_to == "TUTORIAL_WINDOW":
     new_window = TutorialWindow()
+  elif switching_to == "ANALYSIS_WINDOW":
+    new_window = AnalysisWindow()
   
   open_window = new_window
 
@@ -231,8 +235,7 @@ class AudioPlayer:
     with dpg.child_window(tag="Audio Player Window", parent="Primary Window"):
         dpg.add_text(default_value="name unknown", tag="selected_file_name")
         with dpg.child_window(tag="waveform_plot", width=-1):
-            with dpg.table(header_row=False, tag="plot_display_table", width=-1, borders_innerH=True):
-                dpg.add_table_column()
+            dpg.add_table(header_row=False, tag="plot_display_table", width=-1, borders_innerH=True)
 
         with dpg.child_window(tag="bottom_bar", width=-1, height=self.BOTTOM_PANEL_HEIGHT):
             dpg.add_button(label="Play", tag="play_button", callback=self.toggle_play_pause)
@@ -246,8 +249,11 @@ class AudioPlayer:
     with dpg.theme() as self.cursor_gray:
         with dpg.theme_component():
             dpg.add_theme_color(dpg.mvPlotCol_Line, (100, 100, 100, 255), category=dpg.mvThemeCat_Plots)
+
     self.on_window_resize()
-    self.audio_file_selected()
+    # load cq, pitch, and audio files; created corresponding plots
+    self.load_selected_files()
+    self.create_cursor_set(0)
 
   def get_window_id(self):
     return "PLAYBACK_WINDOW"
@@ -266,7 +272,6 @@ class AudioPlayer:
       self.update_cursor_motion()
 
   def on_window_resize(self):
-    # keep waveform window above bottom panel TODO currently this is alchemy
     new_height = dpg.get_viewport_height() - 2.25*self.BOTTOM_PANEL_HEIGHT
     dpg.set_item_height("waveform_plot", new_height)
     # center play button & playtime text
@@ -282,72 +287,84 @@ class AudioPlayer:
     self.jump_to_hover_pos()
 
   def update_position_label(self):
-    if self.loaded_audio:
-      if not self.loaded_audio["is_playing"]:
-        pos = self.loaded_audio["current_time_index"]
-      else:
-        pos = pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]
+    if self.loaded_audio == None:
+      return
 
-      # if audio is done playing, stop updating
-      if self.loaded_audio["is_playing"] and not pygame.mixer.music.get_busy():
-        self.reset_play()
-        return
-      # ms to s for position
-      minutes = self.get_minutes(pos)
-      seconds = self.get_seconds_remainder(pos)
-      # ms to s for duration
-      dur_minutes = self.get_minutes(self.loaded_audio["duration"])
-      dur_seconds = self.get_seconds_remainder(self.loaded_audio["duration"])
-      dpg.set_value("playtime_status_text", f"{minutes:02d}:{seconds:02d}/{dur_minutes:02d}:{dur_seconds:02d}")
+    if not self.loaded_audio["is_playing"]:
+      pos = self.loaded_audio["current_time_index"]
+    else:
+      pos = pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]
+
+    # if audio is done playing, stop updating
+    if self.loaded_audio["is_playing"] and not pygame.mixer.music.get_busy():
+      self.reset_play()
+      return
+    # ms to s for position
+    minutes = self.get_minutes(pos)
+    seconds = self.get_seconds_remainder(pos)
+    # ms to s for duration
+    dur_minutes = self.get_minutes(self.loaded_audio["duration"])
+    dur_seconds = self.get_seconds_remainder(self.loaded_audio["duration"])
+    dpg.set_value("playtime_status_text", f"{minutes:02d}:{seconds:02d}/{dur_minutes:02d}:{dur_seconds:02d}")
 
   def update_cursor_motion(self):
-      if self.loaded_audio:
-          if not self.loaded_audio["is_playing"]:
-              pos = self.loaded_audio["current_time_index"] / 1000
-          else:
-              pos = (pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]) / 1000
+    if self.loaded_audio == None:
+      return
+
+    if self.loaded_audio:
+      if not self.loaded_audio["is_playing"]:
+        pos = self.loaded_audio["current_time_index"] / 1000
       else:
-          return
-      if pos > 0 and pos <= self.loaded_audio["duration"]:
-          row_number = int(pos // self.SECONDS_PER_ROW)
-          # given row number, check if the first cursor in the area is in correct row
-          correct_cursor_parent = f"y_axis_{row_number}_0"
-          # if not, delete all cursors and create new ones in the next row
-          if dpg.get_item_parent(self.plot_cursors[0]) != dpg.get_alias_id(correct_cursor_parent):
-              self.create_cursor_set(row_number)
-              dpg.set_y_scroll("waveform_plot", dpg.get_y_scroll("waveform_plot")+950) #TEMP hardcoded for demo
-          # update position of all cursors
-          for cursor_id in self.plot_cursors:
-              dpg.set_value(cursor_id, [[pos]])
+        pos = (pygame.mixer.music.get_pos() + self.loaded_audio["current_time_index"]) / 1000
+    else:
+      return
+    if pos > 0 and pos <= self.loaded_audio["duration"]:
+      row_number = int(pos // self.SECONDS_PER_ROW)
+      # given row number, check if the first cursor in the area is in correct row
+      correct_cursor_parent = f"y_axis_{row_number}_0"
+      # if not, delete all cursors and create new ones in the next row
+      if dpg.get_item_parent(self.plot_cursors[0]) != dpg.get_alias_id(correct_cursor_parent):
+        self.create_cursor_set(row_number)
+        dpg.set_y_scroll("waveform_plot", dpg.get_y_scroll("waveform_plot")+950) #TEMP hardcoded for demo
+      # update position of all cursors
+      for cursor_id in self.plot_cursors:
+        dpg.set_value(cursor_id, [[pos]])
 
   # on mousemove, if hovering over a plot, create a new cursor at position
   def update_hover_cursor(self):
-      if (self.rows_in_table == 0 or self.plots_per_row == 0):
-          return
+    # only can hover/scroll if there's audio to play
+    if self.loaded_audio == None:
+      return
 
-      # delete any previous hover cursors
-      for cursor_id in self.hover_cursors:
-          dpg.delete_item(cursor_id)
-      self.hover_cursors.clear()
-      # loop over plots, determine if any of them have mouse hovering
-      for i in range(self.rows_in_table):
-          for j in range(self.plots_per_row):
-              plot_id = f"waveform_{i}_{j}"
-              if not dpg.does_item_exist(plot_id):
-                  print(f"Error: {plot_id} is not a valid id for a plot right now. We have {self.rows_in_table} rows and {self.plots_per_row} plots per row?")
-                  return
-              # if plot has hover, create a new cursor on all plots in that row using that x coordinate
-              if dpg.is_item_hovered(plot_id):
-                  mouse_pos = dpg.get_plot_mouse_pos()
-                  for k in range(self.plots_per_row):
-                      hover_tag = f"hover_cursor_{i}_{k}"
-                      dpg.add_inf_line_series([mouse_pos[0]], label="vertical line", parent=f"y_axis_{i}_{k}", tag=hover_tag)
-                      self.hover_cursors.append(hover_tag)
-                      dpg.bind_item_theme(f"hover_cursor_{i}_{k}", self.cursor_gray)
-                  return
+    # empty table check (probably superfluous)
+    if (self.rows_in_table == 0 or self.plots_per_row == 0):
+      return
+
+    # delete any previous hover cursors
+    for cursor_id in self.hover_cursors:
+      dpg.delete_item(cursor_id)
+    self.hover_cursors.clear()
+    # loop over plots, determine if any of them have mouse hovering
+    for i in range(self.rows_in_table):
+      for j in range(self.plots_per_row):
+        plot_id = f"waveform_{i}_{j}"
+        if not dpg.does_item_exist(plot_id):
+          print(f"Error: {plot_id} is not a valid id for a plot right now. We have {self.rows_in_table} rows and {self.plots_per_row} plots per row?")
+          return
+        # if plot has hover, create a new cursor on all plots in that row using that x coordinate
+        if dpg.is_item_hovered(plot_id):
+          mouse_pos = dpg.get_plot_mouse_pos()
+          for k in range(self.plots_per_row):
+            hover_tag = f"hover_cursor_{i}_{k}"
+            dpg.add_inf_line_series([mouse_pos[0]], label="vertical line", parent=f"y_axis_{i}_{k}", tag=hover_tag)
+            self.hover_cursors.append(hover_tag)
+            dpg.bind_item_theme(f"hover_cursor_{i}_{k}", self.cursor_gray)
+          return
 
   # on mouseup, if there's a hover cursor, jump to that position
   def jump_to_hover_pos(self):
+    if self.loaded_audio == None:
+      return
     # mouse is not on the plot
     if len(self.hover_cursors) == 0:
         return
@@ -361,32 +378,34 @@ class AudioPlayer:
 
   # generates visual of waveform for the selected audio file
   # splits waveform into separate rows if necessary (based on SECONDS_PER_ROW)
-  # TODO: move this into init/make it less monstrous (clearing no longer necessary)
-  def audio_file_selected(self):
-      global db
-      global loaded_recording_id
-      # TODO these may be outdated
-      self.plot_cursors.clear()
-      self.hover_cursors.clear()
-      self.rows_in_table = 0
-      self.plots_per_row = 0
+  def load_selected_files(self):
+    global db
+    global loaded_recording_id
 
-      #load recording details given id
-      recording_details = db.get_recording_by_id(loaded_recording_id)
+    #load recording details given id
+    recording_details = db.get_recording_by_id(loaded_recording_id)
 
-      self.loaded_audio.clear()
+    # set label for song
+    dpg.set_value("selected_file_name", f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
+
+    # number of plots per row depends on how many input files are defined, but is hardcoded for now
+    # TODO error checking
+    self.plots_per_row = 3 
+
+    #TODO duration is set by audio, which assumes proper trimming w other files
+    duration = 0
+
+    # set up audio file
+    if recording_details['audio_file_path'] != None:
       self.loaded_audio["file_path_name"] = recording_details['audio_file_path']
       self.loaded_audio["is_playing"] = False
       self.loaded_audio["current_time_index"] = 0
-
-      # set label for song
-      dpg.set_value("selected_file_name", f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
 
       # Load the audio file
       audio = AudioSegment.from_file(self.loaded_audio["file_path_name"])
       samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
       if audio.channels > 1:
-          samples = samples.reshape(-1, audio.channels)[:, 0].copy()  
+        samples = samples.reshape(-1, audio.channels)[:, 0].copy()  
 
       # Normalize for better visualization (limiting y axis to -1 to 1 range)
       samples /= np.max(np.abs(samples))
@@ -401,100 +420,105 @@ class AudioPlayer:
 
 
       # process input pitch and CQ spreadsheet
-      # TODO: Graph these values
-      times, pitches, cqs = proc_data.proc_data(
+      p_ticks, times, pitches, cqs = proc_data.proc_data(
         recording_details['pitch_file_path'],
         recording_details['cq_file_path']
       )
 
+      times_array = np.array(times)
+      cqs_array = np.array(cqs)
+      pitches_array = np.array(pitches)
+
+      #calculate graph bounds for pitch-- a little outside of lowest/highest values
+      min_pitch_bound = .9 * p_ticks[0][1]
+      max_pitch_bound = 1.1 * p_ticks[2][1]
+
       # process input CQ spreadsheet
-      cq_file = pd.read_excel(recording_details['cq_file_path'])
-      cq_time = np.array(cq_file.iloc[:, 0].tolist())
-      cq_values = np.array(cq_file.iloc[:, 1].tolist())
+    else:
+      self.loaded_audio = None
 
-      # process input pitch spreadsheet
-      pitch_file = pd.read_excel(recording_details['pitch_file_path'])
-      pitch_time = np.array(pitch_file.iloc[:, 0].tolist())
-      pitch_values = np.array(pitch_file.iloc[:, 1].tolist())
+    if pygame.mixer.music.get_busy():
+      pygame.mixer.music.stop()
 
-      if pygame.mixer.music.get_busy():
-          pygame.mixer.music.stop()
+    # determine number of rows to be added to the table
+    self.rows_in_table = math.ceil(duration / self.SECONDS_PER_ROW)
 
-      # Clear previous plots (if any exist)
-      dpg.delete_item("plot_display_table", children_only=True)
-      dpg.add_table_column(parent="plot_display_table")
+    # not sure why this line is necessary, but it is
+    dpg.add_table_column(parent="plot_display_table")
 
-      self.plots_per_row = 3 # TEMP hard coded for demo
-      self.rows_in_table = num_lines
+    # loop over each line and create a plot for each time chunk (based on SECONDS_PER_ROW)
+    for i in range(self.rows_in_table):
+      # limits of time range per chunk
+      min_time = i * self.SECONDS_PER_ROW
+      max_time = min(min_time + self.SECONDS_PER_ROW, math.floor(duration))
 
-      # loop over each line and create a plot for each chunk
-      for i in range(self.rows_in_table):
-          # limits of time range per chunk
-          min_time = i * self.SECONDS_PER_ROW
-          max_time = min(min_time + self.SECONDS_PER_ROW, math.floor(duration))
-          # if extra audio is <1 second, cut it off
-          if (max_time-min_time == 0):
-              self.rows_in_table = self.rows_in_table - 1
-              break
-          
-          # Generate time values for the CQ and pitch values
-          cq_time_mask = (cq_time >= min_time) & (cq_time <= max_time)
-          cq_time_chunk = cq_time[cq_time_mask]
-          cq_value_chunk = cq_values[cq_time_mask]
+      # if extra audio is <1 second, cut it off
+      if (max_time-min_time == 0):
+          self.rows_in_table = self.rows_in_table - 1
+          break
+      
+      # Generate time values for the CQ and pitch values
+      time_mask = (times_array >= min_time) & (times_array <= max_time)
+      time_chunk = times_array[time_mask]
+      cq_value_chunk = cqs_array[time_mask]
+      pitch_value_chunk = pitches_array[time_mask]
 
-          pitch_time_mask = (pitch_time >= min_time) & (pitch_time <= max_time)
-          pitch_time_chunk = pitch_time[pitch_time_mask]
-          pitch_value_chunk = pitch_values[pitch_time_mask]
+      # Generate X values for audio data (time axis)
+      if recording_details['audio_file_path'] != None:
+        audio_time = np.linspace(min_time, max_time, num=(max_time-min_time)*audio.frame_rate)
+        chunk_samples_audio = samples[min_time*audio.frame_rate:max_time*audio.frame_rate]
 
-          # Generate X values for audio data (time axis)
-          time = np.linspace(min_time, max_time, num=(max_time-min_time)*audio.frame_rate)
-          chunk_samples_audio = samples[min_time*audio.frame_rate:max_time*audio.frame_rate]
+      # container for this line
+      if dpg.does_item_exist("plot_display_table"):
+        with dpg.table_row(tag=f"display_row_{i}", parent="plot_display_table", height=950):
+          with dpg.group(horizontal=False):
+            plot_num = 0
+            # plot the CQ waveform
+            if recording_details['cq_file_path'] != None:
+              with dpg.plot(tag=f"waveform_{i}_{str(plot_num)}", height=260, width=-1):
+                x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_{str(plot_num)}")
+                y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Closed Quotient", tag=f"y_axis_{i}_{str(plot_num)}")
+                dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.00", 1)))
+                #dpg.add_line_series(time, .5*np.sin(5*time), label="Arbitrary Data", parent=y_axis)
+                dpg.add_line_series(time_chunk, cq_value_chunk, label="Closed Quotient", parent=y_axis)
+                # fix time and amplitude so that the user can't scroll around
+                dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
+                dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", 0, 1)
+                plot_num = plot_num + 1
 
-          # container for this line
-          if dpg.does_item_exist("plot_display_table"):
-              with dpg.table_row(tag=f"display_row_{i}", parent="plot_display_table", height=950):
-                  with dpg.group(horizontal=False):
-                      # TODO: allow user to select what types of data they want displayed on this page
-                      # making it dynamic created a glitch, I think due to having a loop within a "with" block
-                      # TODO: find another way to make more dynamic without a for loop (eg: always creating each plot, but setting visibility)
+            # plot the pitch waveform
+            if recording_details['pitch_file_path'] != None:
+              with dpg.plot(tag=f"waveform_{i}_{str(plot_num)}", height=260, width=-1):
+                x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_{str(plot_num)}")
+                y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Pitch Frequency (Hz)", tag=f"y_axis_{i}_{str(plot_num)}")
+                dpg.set_axis_ticks(dpg.last_item(), p_ticks)
+                #dpg.add_line_series(time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
+                #TODO current backend is sending note names rather than frequencies to graph
+                dpg.add_line_series(time_chunk, cq_value_chunk, label="Pitch Frequency", parent=y_axis)
+                # fix time and amplitude so that the user can't scroll around
+                dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
+                # TODO this limit is hard coded right now
+                dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", min_pitch_bound, max_pitch_bound)
+                plot_num = plot_num + 1
 
-                      # plot the waveforms
-                      with dpg.plot(tag=f"waveform_{i}_0", height=260, width=-1):
-                          x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_0")
-                          y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Closed Quotient", tag=f"y_axis_{i}_0")
-                          dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.00", 1)))
-                          #dpg.add_line_series(time, .5*np.sin(5*time), label="Arbitrary Data", parent=y_axis)
-                          dpg.add_line_series(cq_time_chunk, cq_value_chunk, label="Closed Quotient", parent=y_axis)
-                          # fix time and amplitude so that the user can't scroll around
-                          dpg.set_axis_limits(f"x_axis_{i}_0", min_time, max_time)
-                          dpg.set_axis_limits(f"y_axis_{i}_0", 0, 1)
-
-                      with dpg.plot(tag=f"waveform_{i}_1", height=260, width=-1):
-                          x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_1")
-                          y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Pitch Frequency (Hz)", tag=f"y_axis_{i}_1")
-                          dpg.set_axis_ticks(dpg.last_item(), ((" G3 ", 196), (" G4 ", 392)))
-                          dpg.add_line_series(pitch_time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
-                          # fix time and amplitude so that the user can't scroll around
-                          dpg.set_axis_limits(f"x_axis_{i}_1", min_time, max_time)
-                          # TODO this limit is hard coded right now
-                          dpg.set_axis_limits(f"y_axis_{i}_1", 100, 500)
-
-                      with dpg.plot(tag=f"waveform_{i}_2", height=200, width=-1):
-                          x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=f"x_axis_{i}_2")
-                          y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Audio Signal", tag=f"y_axis_{i}_2")
-                          dpg.add_line_series(time, chunk_samples_audio, label="Audio Signal", parent=y_axis)
-                          # fix time and amplitude so that the user can't scroll around
-                          dpg.set_axis_limits(f"x_axis_{i}_2", min_time, max_time)
-                          dpg.set_axis_limits(f"y_axis_{i}_2", -1, 1)
-
-          else:
-              print("Error: Table 'plot_display_table' not found")
-              return
-
-      self.create_cursor_set(0)
+            # plot the audio waveform
+            if recording_details['audio_file_path'] != None:
+              with dpg.plot(tag=f"waveform_{i}_{str(plot_num)}", height=200, width=-1):
+                x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=f"x_axis_{i}_{str(plot_num)}")
+                y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Audio Signal", tag=f"y_axis_{i}_{str(plot_num)}")
+                dpg.add_line_series(audio_time, chunk_samples_audio, label="Audio Signal", parent=y_axis)
+                # fix time and amplitude so that the user can't scroll around
+                dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
+                dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", -1, 1)
+      else:
+        print("Error: Table 'plot_display_table' not found")
+        return
           
   # Where row_num is the row in table where cursor is initialized to
   def create_cursor_set(self, row_num, x_value=0):
+    if self.loaded_audio == None:
+      return
+
     # Initialize cursor
     for cursor_id in self.plot_cursors:
       dpg.delete_item(cursor_id)
@@ -546,6 +570,7 @@ class AudioPlayer:
   def reset_play(self):
     if self.loaded_audio == None:
       return
+
     self.set_is_playing(False)
     self.loaded_audio["current_time_index"] = 0
     self.update_position_label()
@@ -561,6 +586,35 @@ class AudioPlayer:
   # eg: a value that is, in total, 6 minutes 20 seconds will return 20
   def get_seconds_remainder (self, ms_value):
     return int((ms_value % 60000) // 1000)
+
+class AnalysisWindow:
+  def __init__(self):
+    global db
+    global loaded_recording_id
+
+    #load recording details given id
+    recording_details = db.get_recording_by_id(loaded_recording_id)
+
+    # load analysis for given song
+    # process input pitch and CQ spreadsheet
+    p_ticks, data_sets_proc = proc_data.proc_data_sets([(
+      recording_details['pitch_file_path'],
+      recording_details['cq_file_path']
+    )])
+
+    print(p_ticks)
+    print(data_sets_proc)
+    print(data_sets_proc[(
+      recording_details['pitch_file_path'],
+      recording_details['cq_file_path']
+    )])
+
+    with dpg.child_window(tag="Analysis Window", parent="Primary Window"):
+      dpg.add_text("View CQ data corresponding to sung pitches.")
+      dpg.add_text(f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
+
+  def get_window_id(self):
+    return "ANALYSIS_WINDOW"
 
 # window where user can add a new recording (CQ, audio, or both)
 # TODO: expand to allow editing details of a preexisting recording
@@ -594,11 +648,12 @@ class AddRecordingWindow:
       dpg.add_text("\n\n")
       dpg.add_button(label="Submit", callback=self.submit_data)
 
-      # TODO known issue where these aren't clearing properly from memory; need to delete them explicitly
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_audio, id="audio_file_dialog", width=700 ,height=400):
             dpg.add_file_extension("Source files (*.mp3 *.wav){.mp3,.wav}", color=(0, 255, 255, 255))
+      # CQ must be a .csv file
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_cq, id="cq_file_dialog", width=700 ,height=400):
-            dpg.add_file_extension("Source files (*.xlsx){.xlsx}", color=(0, 255, 255, 255))
+            dpg.add_file_extension("Source files (*.csv){.csv}", color=(0, 255, 255, 255))
+      # pitch must be a .xlsx file
       with dpg.file_dialog(directory_selector=False, show=False, callback=self.select_pitch, id="pitch_file_dialog", width=700 ,height=400):
             dpg.add_file_extension("Source files (*.xlsx){.xlsx}", color=(0, 255, 255, 255))
 
@@ -658,8 +713,10 @@ class AddRecordingWindow:
     # global loaded_file_name
     global loaded_recording_id
     global db
-    # TODO: make it so you can select one or the other, doesn't have to be both
-    if self.selected_audio_file == None or self.selected_cq_file == None or self.selected_pitch_file == None or self.selected_song == None:
+
+    # must select at least one file to display, and must select a corresponding song
+    # if (self.selected_audio_file == None and self.selected_cq_file == None and self.selected_pitch_file == None) or self.selected_song == None:
+    if (self.selected_audio_file == None and self.selected_cq_file == None and self.selected_pitch_file == None):
       print(f"Couldn't open playback page without file input (received: {self.selected_audio_file} {self.selected_cq_file} {self.selected_pitch_file} {self.selected_song}")
       return
     
@@ -668,20 +725,21 @@ class AddRecordingWindow:
     # loaded_audio_file = self.selected_audio_file
     # loaded_file_name = dpg.get_value("title_input")
 
-    #TODO make this more smooth if possible - currently, use sequencing of song name list to determine song_id - and it is not working?
+    #TODO make this more smooth if possible - currently, use sequencing of song name list to determine song_id
     song_id = -1
     list_config = dpg.get_item_configuration("song_listbox")    
     for i, item in enumerate(list_config['items']):        
       if item == self.selected_song:
         song_id = i+1
-        print(f"song_id: {song_id}")
 
     # error finding matching id
     if song_id == -1:
-      print("ERROR: could not determine song_id for selection")
-      return
+      print("ERROR: could not determine song_id for selection, picking default")
+      song_id = 0
     
     recording_title = dpg.get_value("title_input")
+    if recording_title == None:
+      recording_title = "Untitled Recording"
     #TODO date generation/setting
     loaded_recording_id = db.insert_recording(song_id, recording_title, "2025-04-16", self.selected_cq_file, self.selected_pitch_file, self.selected_audio_file)
     switch_window("PLAYBACK_WINDOW")
@@ -703,13 +761,19 @@ class LibraryWindow:
         dpg.add_table_column(label="Song Name")
         dpg.add_table_column(label="Recording Name")
         dpg.add_table_column(label="Date")
-        dpg.add_table_column(label="Action")
+        dpg.add_table_column(label="Open Recording")
+        dpg.add_table_column(label="Analyze Recording")
       self.populate_table()
 
   def select_recording(self, sender, app_data, user_data):
     global loaded_recording_id
     loaded_recording_id = user_data
     switch_window("PLAYBACK_WINDOW")
+
+  def select_analysis(self, sender, app_data, user_data):
+    global loaded_recording_id
+    loaded_recording_id = user_data
+    switch_window("ANALYSIS_WINDOW")
 
   def populate_table(self):
     global db
@@ -721,8 +785,13 @@ class LibraryWindow:
         dpg.add_text(rec["recording_name"])
         dpg.add_text(rec["date"])
         dpg.add_button(
-          label="Select",
+          label="Open",
           callback=self.select_recording,
+          user_data=rec["recording_id"]
+        )
+        dpg.add_button(
+          label="Analyze",
+          callback=self.select_analysis,
           user_data=rec["recording_id"]
         )
 
@@ -735,12 +804,6 @@ class WelcomeScreen:
       dpg.add_text("Welcome to EGGceptional Vocals!")
       dpg.add_button(label="Add a new recording", callback=self.create_add_recording_window)
       dpg.add_button(label="View your repertoire", callback=self.create_library_window)
-
-  # def create_audio_player_window(self):
-  #   if dpg.does_item_exist("Audio Player Window"):
-  #     print("ERROR: we already created an audio player window, but now you're asking for another one...")
-  #     return
-  #   switch_window("PLAYBACK_WINDOW")
 
   def get_window_id(self):
     return "WELCOME_WINDOW"
