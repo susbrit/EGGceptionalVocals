@@ -18,7 +18,14 @@ db = None
 # id of recording currently loaded
 loaded_recording_id = -1
 
-# array of all pitches
+# array of all pitch names
+PITCH_NAMES = [
+    'C2', 'C#2', 'D2', 'D#2', 'E2', 'F2', 'F#2', 'G2', 'G#2', 'A2', 'A#2', 'B2',
+    'C3', 'C#3', 'D3', 'D#3', 'E3', 'F3', 'F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3',
+    'C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4',
+    'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5', 'A#5', 'B5',
+    'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6', 'F#6', 'G6', 'G#6', 'A6', 'A#6', 'B6'
+]
 
 # TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
 loaded_cq_file = None
@@ -591,6 +598,7 @@ class AnalysisWindow:
   def __init__(self):
     global db
     global loaded_recording_id
+    global PITCH_NAMES
 
     #load recording details given id
     recording_details = db.get_recording_by_id(loaded_recording_id)
@@ -609,9 +617,42 @@ class AnalysisWindow:
       recording_details['cq_file_path']
     )])
 
+    # arbitrary value for width of plot
+    plot_width = 100
+
+    # construct the x axis labels
+    # first, determine the pitches that we need to include on the graph
+    start = PITCH_NAMES.index(p_ticks[0][0])
+    end = PITCH_NAMES.index(p_ticks[2][0])
+    pitches_included = PITCH_NAMES[start:end+1]
+    print(pitches_included)
+    # one slot for each pitch, plus one extra on either end
+    interval_size = plot_width / (len(pitches_included) + 2)
+    cur_interval = interval_size
+    cq_ticks = ()
+
+    for pitch in pitches_included:
+      new_element = (pitch, cur_interval)
+      cq_ticks = cq_ticks + (new_element,)
+      cur_interval = cur_interval + interval_size
+
+    print(cq_ticks)
+
     with dpg.child_window(tag="Analysis Window", parent="Primary Window"):
       dpg.add_text("View CQ data corresponding to sung pitches.")
       dpg.add_text(f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
+      with dpg.plot(tag="analysis_plot", height=260, width=500):
+        # x axis
+        dpg.add_plot_axis(dpg.mvXAxis, label="Sung Pitch", tag="analysis_x_axis")
+        dpg.set_axis_ticks(dpg.last_item(), cq_ticks)
+        dpg.set_axis_limits(dpg.last_item(), 0, 100)
+
+        # y axis
+        dpg.add_plot_axis(dpg.mvYAxis, label="Closed Quotient", tag="analysis_y_axis")
+        dpg.set_axis_ticks(dpg.last_item(), (("0.1", 0.1), ("0.2", 0.2), ("0.3", 0.3), ("0.4", 0.4), ("0.5", 0.5), ("0.6", 0.6), ("0.7", 0.7), ("0.8", 0.8), ("0.9", 0.9), ("1.0", 1)))
+        dpg.set_axis_limits(dpg.last_item(), 0, 1)
+
+        # data points
 
   def get_window_id(self):
     return "ANALYSIS_WINDOW"
