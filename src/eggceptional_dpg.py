@@ -8,6 +8,7 @@ import math
 import pandas as pd
 import sqlite3
 import proc_data
+from datetime import datetime
 
 open_window = None
 defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW", "ANALYSIS_WINDOW"]
@@ -127,10 +128,6 @@ class RepertoireDatabase:
       cursor.execute("SELECT song_id, song_name FROM Songs")
       songs = cursor.fetchall()
       return songs
-      # result = []
-      # for song in songs:
-      #   result.append(song_info)
-      # return result
 
   # returns array with details for all recordings corresponding to a given song
   def get_recordings_from_song(self, song_id):
@@ -419,7 +416,7 @@ class AudioPlayer:
         recording_details['cq_file_path']
       )
 
-      print(pitches)
+      # for formatting reasons, we need 
 
       times_array = np.array(times)
       cqs_array = np.array(cqs)
@@ -488,12 +485,9 @@ class AudioPlayer:
                 x_axis = dpg.add_plot_axis(dpg.mvXAxis, tag=f"x_axis_{i}_{str(plot_num)}")
                 y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Pitch Frequency (Hz)", tag=f"y_axis_{i}_{str(plot_num)}")
                 dpg.set_axis_ticks(dpg.last_item(), p_ticks)
-                #dpg.add_line_series(time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
-                #TODO current backend is sending note names rather than frequencies to graph
                 dpg.add_line_series(time_chunk, pitch_value_chunk, label="Pitch Frequency", parent=y_axis)
                 # fix time and amplitude so that the user can't scroll around
                 dpg.set_axis_limits(f"x_axis_{i}_{str(plot_num)}", min_time, max_time)
-                # TODO this limit is hard coded right now
                 dpg.set_axis_limits(f"y_axis_{i}_{str(plot_num)}", min_pitch_bound, max_pitch_bound)
                 plot_num = plot_num + 1
 
@@ -643,6 +637,7 @@ class AnalysisWindow:
 
     # calculate x values for idealized female overlay
     idealCQfemalefreqs = proc_data.idealCQfemalefreqs
+    self.female_cq_x_vals = []
 
     for freq in idealCQfemalefreqs:
       if freq in self.pitch_x_val_dict:
@@ -720,7 +715,8 @@ class AnalysisWindow:
     if self.ideal_display_ids == None or len(self.ideal_display_ids) == 0:
       return
     for item in self.ideal_display_ids:
-      dpg.delete_item(item)
+      if dpg.does_item_exist(item):
+        dpg.delete_item(item)
     self.ideal_display_ids.clear()
 
   def get_window_id(self):
@@ -842,7 +838,7 @@ class AddRecordingWindow:
     if recording_title == None:
       recording_title = "Untitled Recording"
     #TODO date generation/setting
-    loaded_recording_id = db.insert_recording(song_id, recording_title, "2025-04-16", self.selected_cq_file, self.selected_pitch_file, self.selected_audio_file)
+    loaded_recording_id = db.insert_recording(song_id, recording_title, datetime.now().strftime("%Y-%m-%d %I:%M %p"), self.selected_cq_file, self.selected_pitch_file, self.selected_audio_file)
     switch_window("PLAYBACK_WINDOW")
 
 class LibraryWindow:
