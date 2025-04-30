@@ -614,6 +614,7 @@ class AudioPlayer:
     return int((ms_value % 60000) // 1000)
 
 class AnalysisWindow:
+  ideal_display_ids = []
   def __init__(self):
     global db
     global loaded_recording_id
@@ -668,6 +669,10 @@ class AnalysisWindow:
     with dpg.child_window(tag="Analysis Window", parent="Primary Window"):
       dpg.add_text("View CQ data corresponding to sung pitches.")
       dpg.add_text(f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
+
+      # changing the text of these radio options might mess with on_radio_select function!
+      dpg.add_radio_button(horizontal=True, items=["Don't show idealized CQ", "Show idealized female CQ", "Show idealized male CQ"], tag="idealized_selection", callback=self.on_radio_select)
+
       with dpg.plot(tag="analysis_plot", height=260, width=800):
         # x axis
         dpg.add_plot_axis(dpg.mvXAxis, label="Sung Pitch", tag="analysis_x_axis")
@@ -681,14 +686,29 @@ class AnalysisWindow:
 
         dpg.add_scatter_series(x_vals, y_vals, parent=dpg.last_item(), label="Pitch vs CQ")
 
+  def on_radio_select(self, sender, new_value):
+    self.clear_ideal_displays()
+    if new_value == "Show idealized female CQ":
+      self.display_ideal_female_cq()
+    elif new_value == "Show idealized male CQ":
+      self.display_ideal_male_cq()
+
   def display_ideal_male_cq(self):
-    pass
+    max_cq = proc_data.idealCQmale[1]/100
+    min_cq = proc_data.idealCQmale[0]/100
+    dpg.add_line_series([0, 100], [max_cq, max_cq], label="max ideal male", parent="analysis_y_axis", tag="max_male")
+    self.ideal_display_ids.append(dpg.last_item())
+    dpg.add_line_series([0, 100], [min_cq, min_cq], label="min ideal male", parent="analysis_y_axis", tag="min_male")
+    self.ideal_display_ids.append(dpg.last_item())
+    dpg.add_shade_series([0, 100], [min_cq, min_cq], y2=[max_cq, max_cq], parent="analysis_y_axis", tag="male_cq_shade")
+    self.ideal_display_ids.append(dpg.last_item())
 
   def display_ideal_female_cq(self):
     pass
 
   def clear_ideal_displays(self):
-    pass
+    for item in self.ideal_display_ids:
+      dpg.delete_item(item)
 
   def get_window_id(self):
     return "ANALYSIS_WINDOW"
