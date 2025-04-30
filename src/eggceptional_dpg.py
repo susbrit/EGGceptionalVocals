@@ -10,13 +10,15 @@ import sqlite3
 import proc_data
 
 open_window = None
-defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW"]
+defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW", "ANALYSIS_WINDOW"]
 
 #sqlite database
 db = None
 
 # id of recording currently loaded
 loaded_recording_id = -1
+
+# array of all pitches
 
 # TEMPORARY VALUES: we want to get this data from the sqlite database rather than hard storing
 loaded_cq_file = None
@@ -65,6 +67,8 @@ def switch_window(switching_to):
     new_window = AddRecordingWindow()
   elif switching_to == "TUTORIAL_WINDOW":
     new_window = TutorialWindow()
+  elif switching_to == "ANALYSIS_WINDOW":
+    new_window = AnalysisWindow()
   
   open_window = new_window
 
@@ -583,6 +587,35 @@ class AudioPlayer:
   def get_seconds_remainder (self, ms_value):
     return int((ms_value % 60000) // 1000)
 
+class AnalysisWindow:
+  def __init__(self):
+    global db
+    global loaded_recording_id
+
+    #load recording details given id
+    recording_details = db.get_recording_by_id(loaded_recording_id)
+
+    # load analysis for given song
+    # process input pitch and CQ spreadsheet
+    p_ticks, data_sets_proc = proc_data.proc_data_sets([(
+      recording_details['pitch_file_path'],
+      recording_details['cq_file_path']
+    )])
+
+    print(p_ticks)
+    print(data_sets_proc)
+    print(data_sets_proc[(
+      recording_details['pitch_file_path'],
+      recording_details['cq_file_path']
+    )])
+
+    with dpg.child_window(tag="Analysis Window", parent="Primary Window"):
+      dpg.add_text("View CQ data corresponding to sung pitches.")
+      dpg.add_text(f"Song Name: {recording_details['song_name']}; Recording Name: {recording_details['recording_name']} on {recording_details['date']}")
+
+  def get_window_id(self):
+    return "ANALYSIS_WINDOW"
+
 # window where user can add a new recording (CQ, audio, or both)
 # TODO: expand to allow editing details of a preexisting recording
 class AddRecordingWindow:
@@ -728,13 +761,19 @@ class LibraryWindow:
         dpg.add_table_column(label="Song Name")
         dpg.add_table_column(label="Recording Name")
         dpg.add_table_column(label="Date")
-        dpg.add_table_column(label="Action")
+        dpg.add_table_column(label="Open Recording")
+        dpg.add_table_column(label="Analyze Recording")
       self.populate_table()
 
   def select_recording(self, sender, app_data, user_data):
     global loaded_recording_id
     loaded_recording_id = user_data
     switch_window("PLAYBACK_WINDOW")
+
+  def select_analysis(self, sender, app_data, user_data):
+    global loaded_recording_id
+    loaded_recording_id = user_data
+    switch_window("ANALYSIS_WINDOW")
 
   def populate_table(self):
     global db
@@ -748,6 +787,11 @@ class LibraryWindow:
         dpg.add_button(
           label="Open",
           callback=self.select_recording,
+          user_data=rec["recording_id"]
+        )
+        dpg.add_button(
+          label="Analyze",
+          callback=self.select_analysis,
           user_data=rec["recording_id"]
         )
 
