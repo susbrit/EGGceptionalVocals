@@ -1,4 +1,4 @@
-import utils.pitch as pitch
+import utils.pitch
 import utils.cq as cq
 import openpyxl
 import numpy as np
@@ -51,14 +51,14 @@ def trim_data(times, pitches, cqs):
 def find_pitch_bounds(pitches):
     freqs = []
     for p in pitches:
-        freqs.append(pitch.get_freq(p))
+        freqs.append(utils.pitch.get_freq(p))
     
     freq_lo = min(freqs)
     freq_mid = np.median(freqs)
     freq_hi = max(freqs)
-    pitch_lo = pitch.get_pitch(freq_lo)
-    pitch_mid = pitch.get_pitch(freq_mid)
-    pitch_hi = pitch.get_pitch(freq_hi)
+    pitch_lo = utils.pitch.get_pitch(freq_lo)
+    pitch_mid =utils.pitch.get_pitch(freq_mid)
+    pitch_hi = utils.pitch.get_pitch(freq_hi)
 
     return ((pitch_lo,freq_lo), (pitch_mid,freq_mid), (pitch_hi,freq_hi))
 
@@ -87,7 +87,9 @@ def map_data(pitches, cqs):
     pitch2cq_map = []
     for pitch in pitch2cq_dict:
         cq = pitch2cq_dict[pitch]
-        pitch2cq_map.append( (pitch, cq) )
+        # represent the pitch as frequency for the data point
+        freq = utils.pitch.get_freq(pitch)
+        pitch2cq_map.append( (freq, cq) )
 
     return pitch2cq_map
 
@@ -109,7 +111,7 @@ def get_pitch_label(freq):
     ___________
     Get the pitch note label corresponding to the mouse cursor position. 
     '''
-    return pitch.get_pitch(freq)
+    return utils.pitch.get_pitch(freq)
 
 def proc_data(pitch_file_path, cq_file_path):
     '''
@@ -134,21 +136,28 @@ def proc_data(pitch_file_path, cq_file_path):
         ( (pitch_lo,freq_lo),  (pitch_mid, freq_mid), (pitch_hi, freq_hi) )
     2) An array of floats representing timestamps to base ptich and CQ values on.
     3) An array of floats representing CQ values.
-    4) An array of strings representing pitch values.
+    4) An array of strings representing pitch notes.
+    5) An array of floats representing frequency values.
     '''
     freq_data = openpyxl.load_workbook(pitch_file_path)
 
-    times, pitches = pitch.proc_freq_data(freq_data, TIME_STEP)
+    times, pitches = utils.pitch.proc_freq_data(freq_data, TIME_STEP)
     cqs = cq.proc_cq_data(times, cq_file_path)
     
     if (len(times) != len(pitches)) | (len(times) != len(cqs)):
         print('Warning: Mismatch of shapes for times and CQs')
         times, pitches, cqs = trim_data(times, pitches, cqs)
 
+    # convert pitches to frequencies
+    freqs = []
+    for pitch in pitches:
+        freqs.append(utils.pitch.get_freq(pitch))
+
+
     # process pitches into p-axis graph ticks
     p_ticks = find_pitch_bounds(pitches)
     
-    return p_ticks, times, pitches, cqs
+    return p_ticks, times, cqs, pitches, freqs
 
 def proc_data_sets(data_sets):
     '''
@@ -174,17 +183,17 @@ def proc_data_sets(data_sets):
     1)  A nested tuple of p-axis graph ticks formatted as 
         ( (pitch_lo,freq_lo),  (pitch_mid, freq_mid), (pitch_hi, freq_hi) )
     2)  A dictionary mapping data sets, as keys, to a list of 2-D data points.
-       Each data point is a tuple formatted as (p, c) where
-       'p' is a pitch value and 'c' is a CQ value.
+       Each data point is a tuple formatted as (f, c) where
+       'f' is a frequency value and 'c' is a CQ value.
     '''
     data_sets_proc = dict()
     pitches_all = []
     # process each data set into a list of data points
     for set in data_sets:
         # process data set into a map
-        p_ticks, times, pitches, cqs = proc_data(set[0], set[1])
+        p_ticks, times, cqs, pitches, freqs = proc_data(set[0], set[1])
         pitch2cq_map = map_data(pitches, cqs)
-        
+
         # add map to dictionary
         data_sets_proc[set] = pitch2cq_map
 
