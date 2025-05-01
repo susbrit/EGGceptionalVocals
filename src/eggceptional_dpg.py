@@ -11,7 +11,7 @@ import proc_data
 from datetime import datetime
 
 open_window = None
-defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW", "ANALYSIS_WINDOW"]
+defined_windows = ["PLAYBACK_WINDOW", "WELCOME_WINDOW", "LIBRARY_WINDOW", "ADD_RECORDING_WINDOW", "TUTORIAL_WINDOW", "ANALYSIS_WINDOW", "CQ_INFO_WINDOW"]
 
 #sqlite database
 db = None
@@ -71,6 +71,8 @@ def switch_window(switching_to):
     new_window = TutorialWindow()
   elif switching_to == "ANALYSIS_WINDOW":
     new_window = AnalysisWindow()
+  elif switching_to == "CQ_INFO_WINDOW":
+    new_window = CQInfoWindow()
   
   open_window = new_window
 
@@ -416,7 +418,19 @@ class AudioPlayer:
         recording_details['cq_file_path']
       )
 
-      # for formatting reasons, we need 
+      print(p_ticks)
+
+      # for formatting reasons, we need to add spacing
+      p_ticks = [list(t) for t in p_ticks]
+      for i, inner in enumerate(p_ticks):
+        p_ticks[i] = list(inner)
+
+      # Modify the string
+      while len(p_ticks[0][0]) < 4:
+        p_ticks[0][0] += " "
+
+      # Convert it back to tuple of tuples
+      p_ticks = tuple(tuple(t) for t in p_ticks)
 
       times_array = np.array(times)
       cqs_array = np.array(cqs)
@@ -933,16 +947,26 @@ class TutorialWindow:
   def get_window_id(self):
     return "TUTORIAL_WINDOW"
 
+class CQInfoWindow:
+  def __init__(self):
+    with dpg.child_window(tag="CQ Info Window", parent="Primary Window"):
+      dpg.add_text("Insert CQ Info Page Here")
+
+  def get_window_id(self):
+    return "CQ_INFO_WINDOW"
+
 class AppManager:
   def __init__(self):
     dpg.create_context()
     dpg.create_viewport(title='Test App', width=600, height=400)
+    dpg.set_global_font_scale(1.6)
     with dpg.window(tag="Primary Window"):
         with dpg.menu_bar():
-          dpg.add_menu_item(label="Home", callback=self.switch_to_welcome)
-          dpg.add_menu_item(label="Tutorial", callback=self.switch_to_tutorial)
-          dpg.add_menu_item(label="Add Recording", callback=self.switch_to_add_recording)
-          dpg.add_menu_item(label="Library", callback=self.switch_to_library)
+          dpg.add_menu_item(label="  Home ", callback=self.switch_to_welcome)
+          dpg.add_menu_item(label="  Tutorial  ", callback=self.switch_to_tutorial)
+          dpg.add_menu_item(label="  CQ/EGG Info  ", callback=self.switch_to_cq_info)
+          dpg.add_menu_item(label="  Add Recording  ", callback=self.switch_to_add_recording)
+          dpg.add_menu_item(label="  Library  ", callback=self.switch_to_library)
 
     with dpg.handler_registry():
         dpg.add_mouse_move_handler(callback=self.update_mouse_move)
@@ -971,6 +995,9 @@ class AppManager:
 
   def switch_to_tutorial(self):
     switch_window("TUTORIAL_WINDOW")
+
+  def switch_to_cq_info(self):
+    switch_window("CQ_INFO_WINDOW")
 
   def update_window_size(self):
     # if there's an open window with its own resize function, execute here
