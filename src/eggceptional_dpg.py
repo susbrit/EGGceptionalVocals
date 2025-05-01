@@ -950,8 +950,13 @@ class TutorialWindow:
 class CQInfoWindow:
   def __init__(self):
     with dpg.child_window(tag="CQ Info Window", parent="Primary Window"):
-      dpg.add_text("Insert CQ Info Page Here")
-
+      dpg.add_text("The closed quotient (CQ) measures how long the vocal folds stay closed during each cycle of vibration. \n" \
+      "For opera singers, this is a crucial indicator of vocal efficiency and strength.\n" \
+      "A well-supported, resonant tone typically requires a consistent CQ—meaning the vocal folds are closing reliably and evenly with each note.\n" \
+      "If the CQ is shaky or erratic, it can reflect instability in breath support or vocal fold coordination, which may lead to a weak, breathy, or uncontrolled sound.\n" \
+      "Opera demands vocal power, stamina, and control, so tracking CQ helps singers and coaches fine-tune technique, avoid strain, and maintain vocal health across demanding performances.")
+      dpg.add_text("An electroglottograph sends a tiny electric current between the two nodes of the larynx, perfect for measuring the vocal folds as they open and close.\n" \
+      "Compared with a surface electromyography or computer vision, the EGG optimizes the data we can collect while still maintaining comfort for the singer.")
   def get_window_id(self):
     return "CQ_INFO_WINDOW"
 
